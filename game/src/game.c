@@ -233,10 +233,6 @@ static void render_particles(void)
 static int shake_timer;
 static int shake_x;
 
-/* the static background (sky gradient + horizon band) is drawn once;
- * dirty-row flushing makes this a big win */
-static bool bg_drawn;
-
 /* ------------------------------ moving platforms ------------------ */
 
 #define MAX_MOVERS 6
@@ -366,7 +362,6 @@ static void start_level(int n)
     player.on_ground = false;
     player.facing_right = true;
     cam_x = 0;
-    bg_drawn = false;              /* redraw the static background */
     intro_timer = 40;              /* "WORLD N" card, then play */
     state = S_INTRO;
 }
@@ -828,9 +823,9 @@ static void render_world(void)
     int cam = cam_x + shake_x;   /* shake_x: +-2 px during the death screen */
     bool night = (level_idx == 4);   /* level 5 is the night level */
 
-    /* the static background (sky + horizon band) is drawn ONCE per
-     * level — dirty-row flushing keeps it on the panel afterwards */
-    if (!bg_drawn) {
+    /* full background repaint EVERY frame: the world scrolls, and a
+     * static background would leave trails behind the moving tiles */
+    {
         int top = night ? C_NIGHT_TOP : C_SKY_TOP;
         int hor = night ? C_NIGHT_HORIZ : C_SKY_HORIZON;
         for (int y = 0; y < 200; y++)
@@ -838,7 +833,6 @@ static void render_world(void)
                      (uint8_t)(top + (199 - y) * (hor - top) / 199));
         for (int y = 200; y < LCD_H; y++)
             lcd_rect(0, y, LCD_W - 1, y, hor);
-        bg_drawn = true;
     }
 
     /* night level: a field of static stars */
@@ -1098,7 +1092,6 @@ void game_run(void)
             lcd_flush();
             if (--intro_timer <= 0) {
                 state = S_PLAYING;
-                bg_drawn = false;      /* redraw under the card */
             }
             break;
 
@@ -1121,7 +1114,6 @@ void game_run(void)
             lcd_flush();
             if (press == DIR_DOWN || press == DIR_CENTER) {
                 state = S_PLAYING;
-                bg_drawn = false;      /* redraw under the overlay */
             }
             break;
 

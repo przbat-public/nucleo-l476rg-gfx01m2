@@ -24,9 +24,6 @@ static uint16_t pal_rgb[256];
 /* the framebuffer: 240*320 = 76800 bytes */
 static uint8_t fb[LCD_W * LCD_H];
 
-/* one flag per row: 1 = the row changed and needs flushing */
-static uint8_t fb_dirty[LCD_H];
-
 /* ---- low-level ST7789 transport ---- */
 
 static void cs(uint8_t on)
@@ -143,14 +140,12 @@ void lcd_init(void)
 void lcd_clear(uint8_t color)
 {
     for (uint32_t i = 0; i < sizeof(fb); i++) fb[i] = color;
-    for (int y = 0; y < LCD_H; y++) fb_dirty[y] = 1;
 }
 
 void lcd_px(int16_t x, int16_t y, uint8_t color)
 {
     if (x < 0 || x >= LCD_W || y < 0 || y >= LCD_H) return;
     fb[(uint32_t)y * LCD_W + x] = color;
-    fb_dirty[y] = 1;
 }
 
 void lcd_rect(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint8_t color)
@@ -204,31 +199,26 @@ void lcd_text(int16_t x, int16_t y, const char *s,
 }
 
 /*
- * Push the framebuffer to the panel — only the rows that changed.
- * When the scene is mostly static this cuts the SPI traffic several
- * times and the frame rate jumps accordingly.
+ * Push the whole framebuffer to the panel (~35 ms at 40 MHz).
+ * A full repaint every frame — with a scrolling world this is the
+ * simple and correct choice (dirty-row tricks leave trails behind
+ * moving tiles).
  */
 void lcd_flush(void)
 {
     volatile uint32_t *spi_sr = (volatile uint32_t *)(0x40013000UL + 0x08);
     volatile uint8_t  *spi_dr = (volatile uint8_t  *)(0x40013000UL + 0x0C);
 
-    for (int y = 0; y < LCD_H; y++) {
-        if (!fb_dirty[y]) continue;
+    set_window(0, 0, LCD_W - 1, LCD_H - 1);
+    dc(1); cs(0);
 
-        set_window(0, y, LCD_W - 1, y);
-        dc(1); cs(0);
-
-        uint8_t *row = &fb[(uint32_t)y * LCD_W];
-        for (int x = 0; x < LCD_W; x++) {
-            uint16_t c = pal_rgb[row[x]];
-            while (!(*spi_sr & (1u << 1))) {}   /* TXE */
-            *spi_dr = c >> 8;
-            while (!(*spi_sr & (1u << 1))) {}
-            *spi_dr = c & 0xFF;
-        }
-        while (*spi_sr & (1u << 7)) {}          /* drain */
-        cs(1);
-        fb_dirty[y] = 0;
+    for (uint32_t i = 0; i < sizeof(fb); i++) {
+        uint16_t c = pal_rgb[fb[i]];
+        while (!(*spi_sr & (1u << 1))) {}   /* TXE */
+        *spi_dr = c >> 8;
+        while (!(*spi_sr & (1u << 1))) {}
+        *spi_dr = c & 0xFF;
     }
+    while (*spi_sr & (1u << 7)) {}          /* drain */
+    cs(1);
 }
