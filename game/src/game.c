@@ -561,6 +561,11 @@ static void render_world(void)
                  (uint8_t)(C_SKY_TOP +
                            (199 - y) * (C_SKY_HORIZON - C_SKY_TOP) / 199));
 
+    /* below the horizon: repaint EVERY frame, otherwise tiles that
+     * scroll left would leave a trail in the framebuffer */
+    for (int y = 200; y < LCD_H; y++)
+        lcd_rect(0, y, LCD_W - 1, y, C_SKY_HORIZON);
+
     /* two parallax mountain layers + drifting clouds */
     draw_mountains(C_MOUNT_FAR,  cam / 6, 45, 150);
     draw_mountains(C_MOUNT_NEAR, cam / 3, 30, 175);
