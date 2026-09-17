@@ -4,7 +4,10 @@
  * A small side-scrolling platformer:
  *   - 16 px tile grid, 240x320 view, horizontal camera
  *   - player physics: gravity, jumping, axis-separated collision
- *   - walker enemies (stomp them), coins, a goal flag, 3 levels
+ *   - walker enemies (stomp them), coins, a goal flag, 5 levels
+ *   - power-ups: mushroom (Big Mario), star (temporary invincibility)
+ *   - classic extras: hit invincibility, brick debris, coin bricks,
+ *     flag-pole slide, per-level countdown timer
  *   - states: TITLE -> PLAYING -> GAME_OVER / WIN
  *
  * The game is pure logic + drawing: every hardware detail is hidden
@@ -24,10 +27,24 @@
 #define LEVEL_COLS  64
 #define LEVEL_ROWS  20
 
+/* --- physics (Mario-feel constants) --- */
+#define MAX_SPEED     3
+#define ACCEL         1    /* px/frame^2 while a direction is held */
+#define DECEL         1    /* friction when no direction is held   */
+#define SKID_SPEED    2    /* |vx| at which a turn-around skids     */
+#define GRAVITY_RISE  1    /* gravity while moving up              */
+#define GRAVITY_FALL  2    /* gravity while falling (snappier)     */
+#define MAX_FALL      12
+#define JUMP_VEL      -11
+#define JUMP_CUT      -4    /* rising speed after B1 is released   */
+#define COYOTE_FRAMES 4     /* frames of grace after leaving a ledge */
+#define JUMP_BUFFER   6     /* frames to buffer a jump before landing */
+
 /* tile kinds */
 enum { T_AIR = '.', T_GROUND = '#', T_BRICK = 'B',
        T_COIN = 'C', T_ENEMY = 'E', T_FLAG = 'F', T_PLAYER = 'P',
-       T_QB = '?', T_QB_USED = 'U', T_PIPE = 'T' };
+       T_QB = '?', T_QB_USED = 'U', T_PIPE = 'T',
+       T_MUSH = 'G', T_STAR = 'S' };
 
 static const char level1[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "................................................................",
@@ -43,7 +60,7 @@ static const char level1[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "................................................................",
     "................................................................",
     "....................CCCC................CCC.....................",
-    ".....................E.............?...................?........",
+    ".....................E.............G...................S........",
     "..........CCC.......BBBB......CCC.......BBB.......CCC...........",
     "................................................................",
     "..........BBB.................BBB.................BBB...........",
@@ -66,7 +83,7 @@ static const char level2[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "................................................................",
     "................................................................",
     "........................CCC......CCC............................",
-    "...........................?......E..?..........................",
+    "...........................G......E..S..........................",
     "........................BBB......BBB............................",
     "................................................................",
     ".................BB...C.......C.................C...............",
@@ -89,7 +106,7 @@ static const char level3[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "............CCB............C....................................",
     "..................................CCC.............CCC...........",
     "............BB..................................................",
-    "................?.........CCC.....BBB.....C?C.....BBB...........",
+    "................G.........CCC.....BBB.....CSC.....BBB...........",
     "...........................................E...................",
     "......BB..................BBB.............BBB...................",
     "........................................C..............C........",
@@ -112,7 +129,7 @@ static const char level4[LEVEL_ROWS][LEVEL_COLS + 1] = {
     ".............BBB............................BBB.................",
     "........CCC.............BBB.............CCC.....................",
     "....................CCC.....CCC..........E..............E.......",
-    "........BBB......?....E...............?.BBB.............BBB.....",
+    "........BBB......G....E...............S.BBB.............BBB.....",
     "....................BBB.....BBB.................................",
     "................................................................",
     "................................................................",
@@ -132,9 +149,9 @@ static const char level5[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "................................................................",
     "................................................................",
     "............CCC...........................CCC...................",
-    "...........................................E?...................",
+    "...........................................ES...................",
     "............BBB...CCC...............CCC...BBB...................",
-    "......CCC.........?.....CCC.....................................",
+    "......CCC.........G.....CCC.....................................",
     "..................BBB...............BBB.........................",
     "......BBB...............BMB....M...............M........BBB.....",
     "................................................................",
@@ -159,6 +176,7 @@ typedef struct {
     int  vx, vy;        /* px per frame */
     bool on_ground;
     bool facing_right;
+    bool big;           /* mushroom power-up: two tiles tall */
 } player_t;
 
 typedef struct {
@@ -168,10 +186,25 @@ typedef struct {
     bool flipped;      /* launched by a block hit: tumbles off screen */
 } enemy_t;
 
-static player_t player;
-static enemy_t  enemies[4];
-static int      enemy_count;
-static uint32_t frame;       /* frame counter (animations) */
+/* mushroom / star power-up dropped out of a G / S block */
+typedef struct {
+    int  x, y;
+    int  vx, vy;
+    int  rising;       /* frames left while emerging from the block */
+    bool active;
+    bool star;         /* true: bouncing star, false: walking mushroom */
+} powerup_t;
+
+static player_t  player;
+static enemy_t   enemies[4];
+static int       enemy_count;
+static powerup_t powup;
+static uint32_t  frame;       /* frame counter (animations) */
+
+/* classic hit invincibility: a few frames of blinking after damage */
+static int iframes;
+/* star power-up: kills on touch + palette flash while active */
+static int star_timer;
 
 /* ------------------------------ particles ------------------------- */
 
@@ -268,6 +301,9 @@ static int     clear_timer;  /* frames left on the LEVEL CLEAR screen */
 static int     dead_timer;   /* frames left on the death screen */
 static int     intro_timer;  /* frames left on the WORLD intro card */
 static int     flash_timer;  /* white flash when the flag is reached */
+static int     time_left;    /* countdown timer, in seconds */
+static int     time_tick;    /* frame accumulator for the timer */
+static int     bonus;        /* time bonus awarded at the level clear */
 
 /* ------------------------------ prototypes ------------------------ */
 
@@ -276,21 +312,26 @@ static bool box_hits(int x, int y, int w, int h);
 static bool overlap(int ax, int ay, int aw, int ah,
                     int bx, int by, int bw, int bh);
 static void player_die(void);
-/* castle ending: after the flag, Mario auto-walks into the castle */
+/* castle ending: grab the flag pole, slide down, walk into the castle */
 static int  flag_tx;
 static bool auto_right;
 static bool entering_castle;
+static bool flag_done;    /* the flag was already grabbed this level */
+static int  castle_phase;   /* 0 = sliding down the pole,
+                               1 = walking to the door,
+                               2 = sliding into the castle */
 
 static void start_level(int n);
 static void draw_mario(int x, int y, bool facing_right);
 static void flip_enemies_on(int tx, int hty);
+static void break_brick(int tx, int ty);
 
 /* ------------------------------ level loading --------------------- */
 
 static bool solid_tile(uint8_t t)
 {
     return t == T_GROUND || t == T_BRICK || t == T_PIPE ||
-           t == T_QB || t == T_QB_USED;
+           t == T_QB || t == T_QB_USED || t == T_MUSH || t == T_STAR;
 }
 
 static bool solid_at(int tx, int ty)
@@ -318,6 +359,119 @@ static bool overlap(int ax, int ay, int aw, int ah,
 {
     return ax < bx + bw && ax + aw > bx &&
            ay < by + bh && ay + ah > by;
+}
+
+/* current player height: two tiles tall while Big Mario */
+static int mario_h(void)
+{
+    return player.big ? MARIO_BIG_H : MARIO_H;
+}
+
+/* four brick shards with real gravity, arcing out of the broken block */
+static void spawn_shards(int x, int y)
+{
+    static const int8_t svx[4] = { -2, -1, 1, 2 };
+    static const int8_t svy[4] = { -5, -6, -6, -5 };
+    int placed = 0;
+    for (int i = 0; i < MAX_PARTS && placed < 4; i++) {
+        if (parts[i].life != 0) continue;
+        parts[i].x = (int16_t)(x + svx[placed] * 3);
+        parts[i].y = (int16_t)(y - 4);
+        parts[i].vx = svx[placed];
+        parts[i].vy = svy[placed];
+        parts[i].life = 26;
+        parts[i].color = C_ORANGE;
+        placed++;
+    }
+}
+
+/* break a brick: some bricks hide a coin, others shatter into shards */
+static void break_brick(int tx, int ty)
+{
+    grid[ty][tx] = T_AIR;
+    score += 10;
+    /* deterministic coin bricks: about every fourth brick */
+    if (((tx * 7 + ty * 13) & 3) == 0) {
+        coins++;
+        pop.x = tx * TILE + 4 - cam_x;
+        pop.y = ty * TILE - 10;
+        pop.vy = -7;
+        pop.life = 30;
+    } else {
+        spawn_shards(tx * TILE + 8 - cam_x, ty * TILE + 8);
+    }
+    flip_enemies_on(tx, ty);
+}
+
+/* a G / S block is bumped: the power-up rises out of the block top */
+static void spawn_powerup(int tx, int hty, bool is_star)
+{
+    powup.x = tx * TILE + 2;
+    powup.y = hty * TILE + 2;       /* hidden inside the block first */
+    powup.vx = is_star ? 2 : 1;
+    powup.vy = 0;
+    powup.rising = 14;              /* frames spent emerging */
+    powup.star = is_star;
+    powup.active = true;
+}
+
+static void update_powerup(void)
+{
+    if (!powup.active) return;
+
+    if (powup.rising > 0) {         /* emerge from the block */
+        powup.rising--;
+        powup.y--;
+        return;
+    }
+
+    if (powup.star) {
+        /* star: hops along the ground, bouncing off walls */
+        powup.vy += 1;
+        powup.x += powup.vx;
+        powup.y += powup.vy;
+        int fx = powup.x + (powup.vx > 0 ? 12 : 0);
+        if (solid_at(fx / TILE, powup.y / TILE) ||
+            solid_at(fx / TILE, (powup.y + 11) / TILE))
+            powup.vx = -powup.vx;
+        if (powup.vy >= 0 &&
+            box_hits(powup.x, powup.y + 11, 12, 2)) {
+            powup.vy = -9;          /* bounce */
+        }
+    } else {
+        /* mushroom: walks like a classic enemy, falls off ledges */
+        powup.vy += GRAVITY_FALL;
+        if (powup.vy > MAX_FALL) powup.vy = MAX_FALL;
+        powup.x += powup.vx;
+        int fx = powup.x + (powup.vx > 0 ? 12 : 0);
+        if (solid_at(fx / TILE, powup.y / TILE) ||
+            solid_at(fx / TILE, (powup.y + 11) / TILE))
+            powup.vx = -powup.vx;
+        int ny = powup.y + powup.vy;
+        if (box_hits(powup.x + 1, ny + 11, 10, 1)) {
+            powup.y = (ny + 12) / TILE * TILE - 12;   /* snap on top */
+            powup.vy = 0;
+        } else {
+            powup.y = ny;
+        }
+    }
+
+    if (powup.y > LCD_H + 32) powup.active = false;
+
+    /* player pickup */
+    if (overlap(player.x, player.y, MARIO_W, mario_h(),
+                powup.x, powup.y, 12, 12)) {
+        powup.active = false;
+        score += 100;
+        if (powup.star) {
+            star_timer = 100;       /* ~6 s of touch-death invincibility */
+        } else {
+            player.big = true;      /* grow! */
+            /* keep the feet planted: raise the top by the extra height */
+            player.y -= MARIO_BIG_H - MARIO_H;
+        }
+        spawn_burst(powup.x - cam_x, powup.y, C_GOLD, 10);
+    }
 }
 
 static void start_level(int n)
@@ -370,9 +524,18 @@ static void start_level(int n)
     player.vx = player.vy = 0;
     player.on_ground = false;
     player.facing_right = true;
+    player.big = false;
+    iframes = 0;
+    star_timer = 0;
+    powup.active = false;
+    time_left = 300;               /* classic 5-minute countdown */
+    time_tick = 0;
+    bonus = 0;
     cam_x = 0;
     auto_right = false;
     entering_castle = false;
+    castle_phase = 0;
+    flag_done = false;
     intro_timer = 40;              /* "WORLD N" card, then play */
     state = S_INTRO;
 }
@@ -390,19 +553,6 @@ static void update_movers(void)
 }
 
 /* ------------------------------ physics --------------------------- */
-
-/* --- physics (Mario-feel constants) --- */
-#define MAX_SPEED     3
-#define ACCEL         1    /* px/frame^2 while a direction is held */
-#define DECEL         1    /* friction when no direction is held   */
-#define SKID_SPEED    2    /* |vx| at which a turn-around skids     */
-#define GRAVITY_RISE  1    /* gravity while moving up              */
-#define GRAVITY_FALL  2    /* gravity while falling (snappier)     */
-#define MAX_FALL      12
-#define JUMP_VEL      -11
-#define JUMP_CUT      -4    /* rising speed after B1 is released   */
-#define COYOTE_FRAMES 4     /* frames of grace after leaving a ledge */
-#define JUMP_BUFFER   6     /* frames to buffer a jump before landing */
 
 /* --- player physics state (coyote time, jump buffering, skid) --- */
 static int  coyote;        /* frames left in which a jump is still legal */
@@ -440,7 +590,7 @@ static void update_player(void)
     if (player.on_ground && (player.vx == MAX_SPEED || player.vx == -MAX_SPEED
                              || skidding) && (frame & 5) == 0) {
         spawn_burst(player.x + (player.vx > 0 ? 0 : MARIO_W) - cam_x,
-                    player.y + MARIO_H - 2, C_GRAY, 1);
+                    player.y + mario_h() - 2, C_GRAY, 1);
     }
 
     /* --- jumping: coyote time + buffering --- */
@@ -473,7 +623,7 @@ static void update_player(void)
     /* ride the moving platform we stand on */
     if (ride >= 0) {
         mover_t *m = &movers[ride];
-        if (overlap(player.x, player.y + MARIO_H - 2, MARIO_W, 2,
+        if (overlap(player.x, player.y + mario_h() - 2, MARIO_W, 2,
                     m->x, m->y - 4, MOV_W, 10))
             player.y += m->dy;
         else
@@ -485,16 +635,16 @@ static void update_player(void)
     if (player.vy >= 0) {
         /* falling: check the feet line */
         int ny = player.y + player.vy;
-        int feet = ny + MARIO_H;
+        int feet = ny + mario_h();
         bool landed = false;
         if (box_hits(player.x + 1, feet - 1, MARIO_W - 2, 1)) {
-            player.y = (feet / TILE) * TILE - MARIO_H;   /* snap on top */
+            player.y = (feet / TILE) * TILE - mario_h();  /* snap on top */
             if (!was_ground && player.vy >= 5) {
                 /* landing dust */
-                spawn_burst(player.x + 2 - cam_x, player.y + MARIO_H - 2,
+                spawn_burst(player.x + 2 - cam_x, player.y + mario_h() - 2,
                             C_GRAY, 4);
                 spawn_burst(player.x + MARIO_W - 2 - cam_x,
-                            player.y + MARIO_H - 2, C_GRAY, 4);
+                            player.y + mario_h() - 2, C_GRAY, 4);
             }
             player.vy = 0;
             player.on_ground = true;
@@ -504,9 +654,9 @@ static void update_player(void)
             /* land on a moving platform? */
             for (int i = 0; i < mover_count; i++) {
                 mover_t *m = &movers[i];
-                if (overlap(player.x, player.y + MARIO_H - 2, MARIO_W, 3,
+                if (overlap(player.x, player.y + mario_h() - 2, MARIO_W, 3,
                             m->x, m->y - 2, MOV_W, 8)) {
-                    player.y = m->y - MARIO_H;
+                    player.y = m->y - mario_h();
                     player.vy = 0;
                     player.on_ground = true;
                     ride = i;
@@ -543,13 +693,19 @@ static void update_player(void)
                     pop.vy = -7;
                     pop.life = 30;
                     flip_enemies_on(tx, hty);
-                } else if (grid[hty][tx] == T_BRICK) {
-                    /* brick shatters */
-                    grid[hty][tx] = T_AIR;
-                    score += 10;
-                    spawn_burst(tx * TILE + 8 - cam_x, hty * TILE + 8,
-                                C_ORANGE, 8);
+                } else if (grid[hty][tx] == T_MUSH) {
+                    /* mushroom block -> mushroom power-up pops out */
+                    grid[hty][tx] = T_QB_USED;
+                    spawn_powerup(tx, hty, false);
                     flip_enemies_on(tx, hty);
+                } else if (grid[hty][tx] == T_STAR) {
+                    /* star block -> star power-up pops out */
+                    grid[hty][tx] = T_QB_USED;
+                    spawn_powerup(tx, hty, true);
+                    flip_enemies_on(tx, hty);
+                } else if (grid[hty][tx] == T_BRICK) {
+                    /* brick: shards or a hidden coin */
+                    break_brick(tx, hty);
                 }
             }
         } else {
@@ -560,11 +716,36 @@ static void update_player(void)
     /* --- horizontal move with collision --- */
     if (player.vx != 0) {
         int nx = player.x + player.vx;
-        if (box_hits(nx, player.y + 1, MARIO_W, MARIO_H - 2)) {
-            /* push against the wall */
-            if (player.vx > 0) player.x = (nx / TILE) * TILE - MARIO_W;
-            else               player.x = (nx / TILE + 1) * TILE;
-            player.vx = 0;
+        if (box_hits(nx, player.y + 1, MARIO_W, mario_h() - 2)) {
+            if (player.big) {
+                /* Big Mario plows through bricks without jumping */
+                int lead = player.vx > 0 ? nx + MARIO_W - 1 : nx;
+                bool smashed = false;
+                int ttx = lead / TILE;
+                int ty0 = (player.y + 1) / TILE;
+                int ty1 = (player.y + mario_h() - 2) / TILE;
+                if (ty1 >= LEVEL_ROWS) ty1 = LEVEL_ROWS - 1;
+                if (ttx >= 0 && ttx < LEVEL_COLS) {
+                    for (int ty = ty0; ty <= ty1; ty++)
+                        if (ty >= 0 && grid[ty][ttx] == T_BRICK) {
+                            break_brick(ttx, ty);
+                            smashed = true;
+                        }
+                }
+                if (smashed) {
+                    player.x = nx;          /* keep walking */
+                } else {
+                    /* real wall: push against it */
+                    if (player.vx > 0) player.x = (nx / TILE) * TILE - MARIO_W;
+                    else               player.x = (nx / TILE + 1) * TILE;
+                    player.vx = 0;
+                }
+            } else {
+                /* push against the wall */
+                if (player.vx > 0) player.x = (nx / TILE) * TILE - MARIO_W;
+                else               player.x = (nx / TILE + 1) * TILE;
+                player.vx = 0;
+            }
         } else {
             player.x = nx;
         }
@@ -572,7 +753,7 @@ static void update_player(void)
 
     /* --- collect coins the player overlaps --- */
     int x0 = player.x / TILE, x1 = (player.x + MARIO_W - 1) / TILE;
-    int y0 = player.y / TILE, y1 = (player.y + MARIO_H - 1) / TILE;
+    int y0 = player.y / TILE, y1 = (player.y + mario_h() - 1) / TILE;
     for (int ty = y0; ty <= y1; ty++)
         for (int tx = x0; tx <= x1; tx++) {
             if (tx < 0 || tx >= LEVEL_COLS || ty < 0 || ty >= LEVEL_ROWS) continue;
@@ -593,18 +774,25 @@ static void update_player(void)
             }
         }
 
-    /* --- reached the goal flag? -> auto-walk into the castle --- */
+    /* --- reached the goal flag? -> grab the pole and slide down --- */
     int ptx = (player.x + MARIO_W / 2) / TILE;
-    for (int ty = 0; ty < LEVEL_ROWS; ty++) {
-        if (grid[ty][ptx] == T_FLAG) {
-            score += 100;
-            flag_tx = ptx;
-            auto_right = true;
-            entering_castle = false;
-            state = S_CASTLE;
-            return;
+    if (!flag_done)
+        for (int ty = 0; ty < LEVEL_ROWS; ty++) {
+            if (grid[ty][ptx] == T_FLAG) {
+                score += 100;
+                flag_tx = ptx;
+                flag_done = true;
+                player.x = ptx * TILE + 2;     /* grab the pole */
+                player.vx = 0;
+                player.vy = 0;
+                player.facing_right = true;
+                auto_right = false;
+                entering_castle = false;
+                castle_phase = 0;              /* slide down first */
+                state = S_CASTLE;
+                return;
+            }
         }
-    }
 
     /* --- fell into a pit --- */
     if (player.y > LCD_H + 16)
@@ -657,16 +845,33 @@ static void update_enemies(void)
         e->x += e->vx;
 
         /* collide with the player */
-        if (overlap(player.x, player.y, MARIO_W, MARIO_H,
+        if (overlap(player.x, player.y, MARIO_W, mario_h(),
                     e->x, e->y, ENEMY_W, ENEMY_H)) {
-            if (player.vy > 0 &&
-                (player.y + MARIO_H - e->y) < 10) {
+            if (star_timer > 0) {
+                /* star power: touching an enemy destroys it */
+                e->alive = false;
+                score += 100;
+                spawn_burst(e->x + ENEMY_W / 2 - cam_x,
+                            e->y + ENEMY_H / 2, C_GOLD, 8);
+            } else if (player.vy > 0 &&
+                       (player.y + mario_h() - e->y) < 10) {
                 /* stomp! */
                 e->alive = false;
                 player.vy = -8;
                 score += 50;
                 spawn_burst(e->x + ENEMY_W / 2 - cam_x,
                             e->y + ENEMY_H / 2, C_ORANGE, 8);
+            } else if (iframes > 0) {
+                /* invincibility frames: pass straight through */
+            } else if (player.big) {
+                /* Big Mario survives one hit: shrink, don't die */
+                player.big = false;
+                /* keep the feet planted: drop the top back down */
+                player.y += MARIO_BIG_H - MARIO_H;
+                iframes = 40;       /* ~2 s of blinking invincibility */
+                player.vy = -6;
+                spawn_burst(e->x + ENEMY_W / 2 - cam_x,
+                            e->y + ENEMY_H / 2, C_YELLOW, 10);
             } else {
                 player_die();
                 return;
@@ -681,6 +886,8 @@ static void player_die(void)
     player.vy = -9;                /* classic Mario death: pop up,     */
     player.vx = 0;                 /* then fall off the screen         */
     player.on_ground = false;
+    iframes = 0;
+    star_timer = 0;
     dead_timer = 70;
     state = S_DEAD;
 }
@@ -771,6 +978,26 @@ static void draw_tile(int sx, int sy, int tx, uint8_t t)
         lcd_px(sx + 1, sy + 14, C_DARK_GRAY); lcd_px(sx + 14, sy + 14, C_DARK_GRAY);
         break;
 
+    case T_MUSH:
+        /* classic orange-brown block hiding a mushroom */
+        lcd_rect(sx, sy, sx + TILE - 1, sy + TILE - 1, C_BROWN);
+        lcd_rect(sx, sy, sx + TILE - 1, sy, C_BRICK_HI);
+        lcd_rect(sx, sy + TILE - 1, sx + TILE - 1, sy + TILE - 1, C_DARK_GRAY);
+        lcd_px(sx + 1, sy + 1, C_DARK_GRAY);  lcd_px(sx + 14, sy + 1, C_DARK_GRAY);
+        lcd_px(sx + 1, sy + 14, C_DARK_GRAY); lcd_px(sx + 14, sy + 14, C_DARK_GRAY);
+        lcd_sprite(mushroom_sprite[0], 12, 12, sx + 2, sy + 2, SPR_TRANSPARENT);
+        break;
+
+    case T_STAR:
+        /* yellow ? block hiding a star */
+        lcd_rect(sx, sy, sx + TILE - 1, sy + TILE - 1, C_YELLOW);
+        lcd_rect(sx, sy, sx + TILE - 1, sy, C_BRICK_HI);
+        lcd_rect(sx, sy + TILE - 1, sx + TILE - 1, sy + TILE - 1, C_DARK_GRAY);
+        lcd_px(sx + 1, sy + 1, C_BROWN);   lcd_px(sx + 14, sy + 1, C_BROWN);
+        lcd_px(sx + 1, sy + 14, C_BROWN);  lcd_px(sx + 14, sy + 14, C_BROWN);
+        lcd_sprite(star_sprite[0], 12, 12, sx + 2, sy + 2, SPR_TRANSPARENT);
+        break;
+
     case T_PIPE: {
         bool lip = (ty == 0) || (grid[ty - 1][tx] != T_PIPE);
         if (lip) {
@@ -825,10 +1052,13 @@ static void draw_tile(int sx, int sy, int tx, uint8_t t)
 
 /* Mario faces right in the art; mirror manually when walking left.
  * Frame selection: jump pose in the air, walk cycle while moving,
- * standing otherwise. */
+ * standing otherwise. Big Mario (mushroom) draws from the taller
+ * sprite set; hit invincibility blinks him on and off; the star
+ * power-up cycles the shirt through a rainbow flash. */
 static void draw_mario(int x, int y, bool facing_right)
 {
     static const uint8_t walk_seq[4] = { 0, 1, 2, 1 };
+    static const uint8_t flash_colors[4] = { P_R, P_Y, P_G, P_B };
     int f;
     if (!player.on_ground)
         f = 3;                           /* jump pose */
@@ -837,12 +1067,24 @@ static void draw_mario(int x, int y, bool facing_right)
     else
         f = 0;                           /* standing */
 
-    for (int row = 0; row < MARIO_H; row++) {
-        for (int col = 0; col < MARIO_W; col++) {
-            int src = facing_right ? col : (MARIO_W - 1 - col);
-            uint8_t c = mario_sprite[f][row][src];
-            if (c != SPR_TRANSPARENT)
-                lcd_px(x + col, y + row, c);
+    /* invincibility frames: blink (visible every other 4-frame phase) */
+    if (iframes > 0 && ((frame >> 2) & 1) == 0)
+        return;
+
+    int h = player.big ? MARIO_BIG_H : MARIO_H;
+    int w = player.big ? MARIO_BIG_W : MARIO_W;
+
+    for (int row = 0; row < h; row++) {
+        for (int col = 0; col < w; col++) {
+            int src = facing_right ? col : (w - 1 - col);
+            uint8_t c = player.big ? mario_big_sprite[f][row][src]
+                                   : mario_sprite[f][row][src];
+            if (c == SPR_TRANSPARENT)
+                continue;
+            /* star power: the shirt flashes through the palette */
+            if (star_timer > 0 && c == P_R)
+                c = flash_colors[(frame >> 2) & 3];
+            lcd_px(x + col, y + row, c);
         }
     }
 }
@@ -949,6 +1191,16 @@ static void render_world(void)
                        e->x - cam, e->y, SPR_TRANSPARENT);
     }
 
+    /* power-up on the loose (mushroom walks, star bounces) */
+    if (powup.active) {
+        if (powup.star)
+            lcd_sprite(star_sprite[0], 12, 12, powup.x - cam, powup.y,
+                       SPR_TRANSPARENT);
+        else
+            lcd_sprite(mushroom_sprite[0], 12, 12, powup.x - cam, powup.y,
+                       SPR_TRANSPARENT);
+    }
+
     /* player */
     draw_mario(player.x - cam, player.y, player.facing_right);
 
@@ -973,6 +1225,11 @@ static void draw_hud(void)
     lcd_text(112, 2, "C", C_YELLOW, C_BLACK, 1);
     fmt_int(buf, coins);
     lcd_text(120, 2, buf, C_WHITE, C_BLACK, 1);
+
+    /* countdown timer */
+    lcd_text(140, 2, "T", C_YELLOW, C_BLACK, 1);
+    fmt_int(buf, time_left);
+    lcd_text(146, 2, buf, C_WHITE, C_BLACK, 1);
 
     lcd_text(190, 2, "LV", C_WHITE, C_BLACK, 1);
     fmt_int(buf, level_idx + 1);
@@ -1020,6 +1277,12 @@ static void render_level_clear(void)
     fmt_int(buf, level_idx + 1);
     lcd_text(96, 126, buf, C_YELLOW, C_BLACK, 3);
     lcd_text(84, 170, "CLEAR!", C_GREEN, C_BLACK, 2);
+    if (bonus > 0) {
+        lcd_text(84, 202, "TIME", C_WHITE, C_BLACK, 1);
+        lcd_text(114, 202, "BONUS", C_GREEN, C_BLACK, 1);
+        fmt_int(buf, bonus);
+        lcd_text(150, 202, buf, C_YELLOW, C_BLACK, 1);
+    }
     fmt_int(buf, score);
     lcd_text(60, 240, "SCORE", C_WHITE, C_BLACK, 1);
     lcd_text(96, 258, buf, C_YELLOW, C_BLACK, 2);
@@ -1155,7 +1418,20 @@ void game_run(void)
                 state = S_PAUSED;      /* DOWN toggles pause */
                 break;
             }
+            /* power-up timers tick down */
+            if (iframes > 0) iframes--;
+            if (star_timer > 0) star_timer--;
+            /* level countdown: one second per ~16 frames */
+            if (++time_tick >= 16) {
+                time_tick = 0;
+                if (--time_left <= 0) {
+                    time_left = 0;
+                    player_die();      /* time is up: classic death */
+                    break;
+                }
+            }
             update_movers();
+            update_powerup();
             update_player();
             update_enemies();
             update_camera();
@@ -1196,24 +1472,36 @@ void game_run(void)
             break;
 
         case S_CASTLE:
-            /* Mario auto-walks into the castle to finish the level */
+            /* flag grabbed: slide down the pole, walk to the door,
+             * then slide into the castle. Enemies freeze. */
             update_movers();
-            if (!entering_castle) {
+            if (castle_phase == 0) {
+                /* slide down the pole */
+                player.y += 3;
+                int feet = player.y + mario_h();
+                if (box_hits(player.x + 1, feet - 1, MARIO_W - 2, 1)) {
+                    player.y = (feet / TILE) * TILE - mario_h();
+                    castle_phase = 1;          /* landed: walk */
+                    auto_right = true;
+                }
+            } else if (castle_phase == 1) {
                 update_player();
                 if (player.x + MARIO_W / 2 >= flag_tx * TILE + 34) {
-                    entering_castle = true;   /* at the door: slide in */
+                    castle_phase = 2;          /* at the door: slide in */
+                    entering_castle = true;
                     player.vx = 0;
                 }
             } else {
-                player.y += 4;                /* slide down, off screen */
+                player.y += 4;                 /* slide down, off screen */
                 if (player.y > LCD_H + 16) {
+                    bonus = time_left * 5;     /* classic time bonus */
+                    score += bonus;
                     flash_timer = 4;
                     clear_timer = 40;
                     auto_right = false;
                     state = S_LEVEL_CLEAR;
                 }
             }
-            update_enemies();
             update_camera();
             render_world();
             draw_hud();
