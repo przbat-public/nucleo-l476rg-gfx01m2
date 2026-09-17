@@ -175,6 +175,19 @@ void lcd_sprite(const uint8_t *sprite, uint8_t w, uint8_t h,
     }
 }
 
+/* like lcd_sprite but vertically mirrored (upside-down enemies) */
+void lcd_sprite_flip_v(const uint8_t *sprite, uint8_t w, uint8_t h,
+                       int16_t x, int16_t y, uint8_t transparent)
+{
+    for (uint8_t row = 0; row < h; row++) {
+        for (uint8_t col = 0; col < w; col++) {
+            uint8_t c = sprite[(uint16_t)(h - 1 - row) * w + col];
+            if (c != transparent)
+                lcd_px(x + col, y + row, c);
+        }
+    }
+}
+
 void lcd_text(int16_t x, int16_t y, const char *s,
               uint8_t fg, uint8_t bg, uint8_t scale)
 {

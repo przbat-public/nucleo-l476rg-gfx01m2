@@ -163,8 +163,9 @@ typedef struct {
 
 typedef struct {
     int  x, y;
-    int  vx;
+    int  vx, vy;       /* vy: only used while flipped by a block bump */
     bool alive;
+    bool flipped;      /* launched by a block hit: tumbles off screen */
 } enemy_t;
 
 static player_t player;
@@ -277,6 +278,7 @@ static bool overlap(int ax, int ay, int aw, int ah,
 static void player_die(void);
 static void start_level(int n);
 static void draw_mario(int x, int y, bool facing_right);
+static void flip_enemies_on(int tx, int hty);
 
 /* ------------------------------ level loading --------------------- */
 
@@ -334,7 +336,9 @@ static void start_level(int n)
                     enemies[enemy_count].x = tx * TILE + 2;
                     enemies[enemy_count].y = ty * TILE + (TILE - ENEMY_H);
                     enemies[enemy_count].vx = -1;
+                    enemies[enemy_count].vy = 0;
                     enemies[enemy_count].alive = true;
+                    enemies[enemy_count].flipped = false;
                     enemy_count++;
                 }
                 t = T_AIR;
@@ -531,12 +535,14 @@ static void update_player(void)
                     pop.y = hty * TILE - 10;
                     pop.vy = -7;
                     pop.life = 30;
+                    flip_enemies_on(tx, hty);
                 } else if (grid[hty][tx] == T_BRICK) {
                     /* brick shatters */
                     grid[hty][tx] = T_AIR;
                     score += 10;
                     spawn_burst(tx * TILE + 8 - cam_x, hty * TILE + 8,
                                 C_ORANGE, 8);
+                    flip_enemies_on(tx, hty);
                 }
             }
         } else {
@@ -597,11 +603,36 @@ static void update_player(void)
         player_die();
 }
 
+/* A block was hit from below: any enemy standing on it is launched
+ * up, flipped, and tumbles off the screen (classic Mario). */
+static void flip_enemies_on(int tx, int hty)
+{
+    for (int i = 0; i < enemy_count; i++) {
+        enemy_t *e = &enemies[i];
+        if (!e->alive || e->flipped) continue;
+        if (e->x + ENEMY_W > tx * TILE && e->x < tx * TILE + TILE &&
+            e->y + ENEMY_H >= hty * TILE - 4 &&
+            e->y + ENEMY_H <= hty * TILE + 10) {
+            e->flipped = true;
+            e->vy = -9;
+            score += 50;
+        }
+    }
+}
+
 static void update_enemies(void)
 {
     for (int i = 0; i < enemy_count; i++) {
         enemy_t *e = &enemies[i];
         if (!e->alive) continue;
+
+        /* flipped by a block bump: tumble off the screen */
+        if (e->flipped) {
+            e->vy += GRAVITY_FALL;
+            e->y += e->vy;
+            if (e->y > LCD_H + 32) e->alive = false;
+            continue;
+        }
 
         /* wall in front -> turn around */
         int fx = e->x + (e->vx > 0 ? ENEMY_W : -1);
@@ -890,8 +921,12 @@ static void render_world(void)
     for (int i = 0; i < enemy_count; i++) {
         enemy_t *e = &enemies[i];
         if (!e->alive) continue;
-        lcd_sprite(enemy_sprite[ef][0], ENEMY_W, ENEMY_H,
-                   e->x - cam, e->y, SPR_TRANSPARENT);
+        if (e->flipped)
+            lcd_sprite_flip_v(enemy_sprite[0][0], ENEMY_W, ENEMY_H,
+                              e->x - cam, e->y, SPR_TRANSPARENT);
+        else
+            lcd_sprite(enemy_sprite[ef][0], ENEMY_W, ENEMY_H,
+                       e->x - cam, e->y, SPR_TRANSPARENT);
     }
 
     /* player */

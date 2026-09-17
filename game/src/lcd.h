@@ -59,6 +59,8 @@ void lcd_px(int16_t x, int16_t y, uint8_t color);
 void lcd_rect(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint8_t color);
 void lcd_sprite(const uint8_t *sprite, uint8_t w, uint8_t h,
                 int16_t x, int16_t y, uint8_t transparent);
+void lcd_sprite_flip_v(const uint8_t *sprite, uint8_t w, uint8_t h,
+                       int16_t x, int16_t y, uint8_t transparent);
 void lcd_text(int16_t x, int16_t y, const char *s,
               uint8_t fg, uint8_t bg, uint8_t scale);
 void lcd_flush(void);   /* send the framebuffer to the panel */
