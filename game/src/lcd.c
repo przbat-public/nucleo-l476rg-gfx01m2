@@ -1,0 +1,192 @@
+/*
+ * lcd.c — ST7789 display driver with an 8-bit indexed framebuffer.
+ *
+ * Layers:
+ *   framebuffer (this file)  — 240x320 bytes, palette indices
+ *   SPI transport (hal.c)    — raw bytes to the ST7789
+ *
+ * The framebuffer lives in SRAM1 (~75 KB). Drawing is plain memory
+ * access; lcd_flush() converts each index through the palette and
+ * streams the resulting RGB565 frame in one go.
+ */
+#include "lcd.h"
+#include "hal.h"
+#include "font5x7.h"
+
+/* LCD control pins (Arduino-route on the GFX01M2 shield) */
+#define PIN_CS  9    /* PA9  */
+#define PIN_DC  10   /* PB10 */
+#define PIN_RST 1    /* PA1  */
+
+/* 256-entry palette: 16 fixed colors + 240 grays/ramps filled at init */
+static uint16_t pal_rgb[256];
+
+/* the framebuffer: 240*320 = 76800 bytes */
+static uint8_t fb[LCD_W * LCD_H];
+
+/* ---- low-level ST7789 transport ---- */
+
+static void cs(uint8_t on)
+{
+    if (on) gpio_set(PORT_A, PIN_CS); else gpio_clear(PORT_A, PIN_CS);
+}
+
+static void dc(uint8_t on)
+{
+    if (on) gpio_set(PORT_B, PIN_DC); else gpio_clear(PORT_B, PIN_DC);
+}
+
+static void cmd(uint8_t c)
+{
+    dc(0); cs(0); spi_write(&c, 1); cs(1);
+}
+
+static void data(const uint8_t *d, uint32_t n)
+{
+    dc(1); cs(0); spi_write(d, n); cs(1);
+}
+
+static void set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
+{
+    uint8_t b[4];
+    cmd(0x2A);
+    b[0] = x0 >> 8; b[1] = x0; b[2] = x1 >> 8; b[3] = x1;
+    data(b, 4);
+    cmd(0x2B);
+    b[0] = y0 >> 8; b[1] = y0; b[2] = y1 >> 8; b[3] = y1;
+    data(b, 4);
+    cmd(0x2C);
+}
+
+/* ---- palette ---- */
+
+static uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b)
+{
+    return (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+}
+
+static void palette_init(void)
+{
+    pal_rgb[C_BLACK]      = rgb565(0, 0, 0);
+    pal_rgb[C_WHITE]      = rgb565(255, 255, 255);
+    pal_rgb[C_RED]        = rgb565(220, 40, 40);
+    pal_rgb[C_GREEN]      = rgb565(40, 200, 60);
+    pal_rgb[C_BLUE]       = rgb565(40, 80, 240);
+    pal_rgb[C_YELLOW]     = rgb565(250, 220, 40);
+    pal_rgb[C_CYAN]       = rgb565(60, 220, 220);
+    pal_rgb[C_MAGENTA]    = rgb565(230, 60, 200);
+    pal_rgb[C_GRAY]       = rgb565(150, 150, 150);
+    pal_rgb[C_DARK_GRAY]  = rgb565(80, 80, 80);
+    pal_rgb[C_SKY]        = rgb565(120, 190, 255);
+    pal_rgb[C_BROWN]      = rgb565(160, 100, 40);
+    pal_rgb[C_GOLD]       = rgb565(255, 200, 60);
+    pal_rgb[C_SKIN]       = rgb565(255, 190, 150);
+    pal_rgb[C_ORANGE]     = rgb565(255, 120, 40);
+    pal_rgb[C_DARK_GREEN] = rgb565(20, 120, 40);
+
+    /* 16..255: grayscale ramp (useful for effects and debugging) */
+    for (int i = 16; i < 256; i++) {
+        uint8_t v = (uint8_t)((i - 16) * 255u / 239u);
+        pal_rgb[i] = rgb565(v, v, v);
+    }
+}
+
+/* ---- public API ---- */
+
+void lcd_init(void)
+{
+    uint8_t v;
+
+    palette_init();
+
+    gpio_clear(PORT_A, PIN_RST); delay_ms(20);
+    gpio_set(PORT_A, PIN_RST);   delay_ms(120);
+
+    cmd(0x36); v = 0x08; data(&v, 1);  /* MADCTL: BGR, no mirror */
+    cmd(0x3A); v = 0x55; data(&v, 1);  /* COLMOD: 16 bpp        */
+    cmd(0x11); delay_ms(120);          /* SLPOUT                */
+    cmd(0x29); delay_ms(20);           /* DISPON                */
+
+    lcd_clear(C_BLACK);
+    lcd_flush();
+}
+
+void lcd_clear(uint8_t color)
+{
+    for (uint32_t i = 0; i < sizeof(fb); i++) fb[i] = color;
+}
+
+void lcd_px(int16_t x, int16_t y, uint8_t color)
+{
+    if (x < 0 || x >= LCD_W || y < 0 || y >= LCD_H) return;
+    fb[(uint32_t)y * LCD_W + x] = color;
+}
+
+void lcd_rect(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint8_t color)
+{
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 >= LCD_W) x1 = LCD_W - 1;
+    if (y1 >= LCD_H) y1 = LCD_H - 1;
+    for (int16_t y = y0; y <= y1; y++)
+        for (int16_t x = x0; x <= x1; x++)
+            lcd_px(x, y, color);
+}
+
+/*
+ * Draw a sprite stored as rows of palette indices
+ * (w bytes per row, h rows). Pixels equal to `transparent` are skipped.
+ */
+void lcd_sprite(const uint8_t *sprite, uint8_t w, uint8_t h,
+                int16_t x, int16_t y, uint8_t transparent)
+{
+    for (uint8_t row = 0; row < h; row++) {
+        for (uint8_t col = 0; col < w; col++) {
+            uint8_t c = sprite[(uint16_t)row * w + col];
+            if (c != transparent)
+                lcd_px(x + col, y + row, c);
+        }
+    }
+}
+
+void lcd_text(int16_t x, int16_t y, const char *s,
+              uint8_t fg, uint8_t bg, uint8_t scale)
+{
+    int16_t ox = x;
+    while (*s) {
+        if (*s == '\n') { y += 8 * scale; x = ox; s++; continue; }
+        if (*s < 32 || *s > 126) { s++; continue; }
+        const uint8_t *g = Font5x7[(uint8_t)(*s - 32)];
+        for (uint8_t col = 0; col < 5; col++) {
+            uint8_t line = g[col];
+            for (uint8_t row = 0; row < 7; row++) {
+                uint8_t c = (line & 0x01) ? fg : bg;
+                for (uint8_t dx = 0; dx < scale; dx++)
+                    for (uint8_t dy = 0; dy < scale; dy++)
+                        lcd_px(x + col * scale + dx, y + row * scale + dy, c);
+                line >>= 1;
+            }
+        }
+        x += 6 * scale;
+        s++;
+    }
+}
+
+/* Push the whole framebuffer to the panel (~35 ms at 40 MHz). */
+void lcd_flush(void)
+{
+    set_window(0, 0, LCD_W - 1, LCD_H - 1);
+    dc(1); cs(0);
+
+    for (uint32_t i = 0; i < sizeof(fb); i++) {
+        uint16_t c = pal_rgb[fb[i]];
+        uint8_t hi = c >> 8, lo = c & 0xFF;
+        /* inline TXE-polled writes (hot path) */
+        while (!(*(volatile uint32_t *)(0x40013000UL + 0x08) & (1u << 1))) {}
+        *(volatile uint8_t *)(0x40013000UL + 0x0C) = hi;
+        while (!(*(volatile uint32_t *)(0x40013000UL + 0x08) & (1u << 1))) {}
+        *(volatile uint8_t *)(0x40013000UL + 0x0C) = lo;
+    }
+    while (*(volatile uint32_t *)(0x40013000UL + 0x08) & (1u << 7)) {} /* drain */
+    cs(1);
+}
