@@ -24,6 +24,9 @@ static uint16_t pal_rgb[256];
 /* the framebuffer: 240*320 = 76800 bytes */
 static uint8_t fb[LCD_W * LCD_H];
 
+/* one flag per row: 1 = the row changed and needs flushing */
+static uint8_t fb_dirty[LCD_H];
+
 /* ---- low-level ST7789 transport ---- */
 
 static void cs(uint8_t on)
@@ -100,9 +103,19 @@ static void palette_init(void)
     pal_rgb[C_MOUNT_FAR]  = rgb565(108, 180, 60);   /* light hill green */
     pal_rgb[C_MOUNT_NEAR] = rgb565(52, 132, 16);    /* grass green      */
 
-    /* 35..255: grayscale ramp */
-    for (int i = 35; i < 256; i++) {
-        uint8_t v = (uint8_t)((i - 35) * 255u / 220u);
+    /* night theme ramp (deep navy -> dark blue) */
+    for (int i = 0; i < 12; i++) {
+        uint8_t r = (uint8_t)(8 + i * 2);      /* 8 .. 30    */
+        uint8_t g = (uint8_t)(16 + i * 4);     /* 16 .. 60   */
+        uint8_t b = (uint8_t)(60 + i * 10);    /* 60 .. 170  */
+        pal_rgb[C_NIGHT_TOP + i] = rgb565(r, g, b);
+    }
+    pal_rgb[C_NIGHT_HILL_FAR]  = rgb565(40, 70, 40);
+    pal_rgb[C_NIGHT_HILL_NEAR] = rgb565(24, 48, 24);
+
+    /* 50..255: grayscale ramp */
+    for (int i = 50; i < 256; i++) {
+        uint8_t v = (uint8_t)((i - 50) * 255u / 205u);
         pal_rgb[i] = rgb565(v, v, v);
     }
 }
@@ -130,12 +143,14 @@ void lcd_init(void)
 void lcd_clear(uint8_t color)
 {
     for (uint32_t i = 0; i < sizeof(fb); i++) fb[i] = color;
+    for (int y = 0; y < LCD_H; y++) fb_dirty[y] = 1;
 }
 
 void lcd_px(int16_t x, int16_t y, uint8_t color)
 {
     if (x < 0 || x >= LCD_W || y < 0 || y >= LCD_H) return;
     fb[(uint32_t)y * LCD_W + x] = color;
+    fb_dirty[y] = 1;
 }
 
 void lcd_rect(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint8_t color)
@@ -188,21 +203,32 @@ void lcd_text(int16_t x, int16_t y, const char *s,
     }
 }
 
-/* Push the whole framebuffer to the panel (~35 ms at 40 MHz). */
+/*
+ * Push the framebuffer to the panel — only the rows that changed.
+ * When the scene is mostly static this cuts the SPI traffic several
+ * times and the frame rate jumps accordingly.
+ */
 void lcd_flush(void)
 {
-    set_window(0, 0, LCD_W - 1, LCD_H - 1);
-    dc(1); cs(0);
+    volatile uint32_t *spi_sr = (volatile uint32_t *)(0x40013000UL + 0x08);
+    volatile uint8_t  *spi_dr = (volatile uint8_t  *)(0x40013000UL + 0x0C);
 
-    for (uint32_t i = 0; i < sizeof(fb); i++) {
-        uint16_t c = pal_rgb[fb[i]];
-        uint8_t hi = c >> 8, lo = c & 0xFF;
-        /* inline TXE-polled writes (hot path) */
-        while (!(*(volatile uint32_t *)(0x40013000UL + 0x08) & (1u << 1))) {}
-        *(volatile uint8_t *)(0x40013000UL + 0x0C) = hi;
-        while (!(*(volatile uint32_t *)(0x40013000UL + 0x08) & (1u << 1))) {}
-        *(volatile uint8_t *)(0x40013000UL + 0x0C) = lo;
+    for (int y = 0; y < LCD_H; y++) {
+        if (!fb_dirty[y]) continue;
+
+        set_window(0, y, LCD_W - 1, y);
+        dc(1); cs(0);
+
+        uint8_t *row = &fb[(uint32_t)y * LCD_W];
+        for (int x = 0; x < LCD_W; x++) {
+            uint16_t c = pal_rgb[row[x]];
+            while (!(*spi_sr & (1u << 1))) {}   /* TXE */
+            *spi_dr = c >> 8;
+            while (!(*spi_sr & (1u << 1))) {}
+            *spi_dr = c & 0xFF;
+        }
+        while (*spi_sr & (1u << 7)) {}          /* drain */
+        cs(1);
+        fb_dirty[y] = 0;
     }
-    while (*(volatile uint32_t *)(0x40013000UL + 0x08) & (1u << 7)) {} /* drain */
-    cs(1);
 }

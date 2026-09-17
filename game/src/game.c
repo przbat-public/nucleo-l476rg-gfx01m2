@@ -121,9 +121,33 @@ static const char level4[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "############....###############....##############....###########",
 };
 
+static const char level5[LEVEL_ROWS][LEVEL_COLS + 1] = {
+    "................................................................",
+    "................................................................",
+    "................................................................",
+    "................................................................",
+    "................................................................",
+    "................................................................",
+    ".............................................................F..",
+    "................................................................",
+    "................................................................",
+    "............CCC...........................CCC...................",
+    "...........................................E?...................",
+    "............BBB...CCC...............CCC...BBB...................",
+    "......CCC.........?.....CCC.....................................",
+    "..................BBB...............BBB.........................",
+    "......BBB...............BMB....M...............M........BBB.....",
+    "................................................................",
+    "......................C.........................................",
+    ".PE...........................CC........C...........C.......C...",
+    "############....##############....############....##############",
+    "############....##############....############....##############",
+};
+
 static const char *const levels[] = { &level1[0][0], &level2[0][0],
-                                      &level3[0][0], &level4[0][0] };
-#define LEVEL_COUNT 4
+                                      &level3[0][0], &level4[0][0],
+                                      &level5[0][0] };
+#define LEVEL_COUNT 5
 
 /* mutable copy of the current level (coins get removed, etc.) */
 static uint8_t grid[LEVEL_ROWS][LEVEL_COLS];
@@ -160,6 +184,10 @@ typedef struct {
 
 static particle_t parts[MAX_PARTS];
 
+/* coin popping out of a ? block (screen space) */
+typedef struct { int x, y, vy; uint8_t life; } pop_coin_t;
+static pop_coin_t pop;
+
 /* Spawn n short-lived pixels flying out of (x, y). */
 static void spawn_burst(int x, int y, uint8_t color, int n)
 {
@@ -193,26 +221,56 @@ static void render_particles(void)
         if (parts[i].life == 0) continue;
         lcd_px(parts[i].x, parts[i].y, parts[i].color);
     }
+    /* coin popping out of a ? block */
+    if (pop.life > 0) {
+        int cf = (int)((frame >> 2) & 3);
+        lcd_sprite(coin_sprite[cf][0], COIN_W, COIN_H,
+                   pop.x, pop.y, SPR_TRANSPARENT);
+    }
 }
 
 /* screen shake: shake_timer frames of a +-2 px jitter */
 static int shake_timer;
 static int shake_x;
 
+/* the static background (sky gradient + horizon band) is drawn once;
+ * dirty-row flushing makes this a big win */
+static bool bg_drawn;
+
+/* ------------------------------ moving platforms ------------------ */
+
+#define MAX_MOVERS 6
+#define MOV_W      48
+#define MOV_H      12
+typedef struct { int x, y; int base_y; int amp; int phase; int dy; } mover_t;
+static mover_t movers[MAX_MOVERS];
+static int mover_count;
+static int ride = -1;    /* mover the player is standing on */
+
+/* 64-entry sine * 31 */
+static const int8_t MOV_SIN[64] = {
+     0,  3,  6,  9, 12, 15, 18, 20, 23, 25, 27, 29, 30, 31, 31, 31,
+    31, 31, 31, 30, 29, 27, 25, 23, 20, 18, 15, 12,  9,  6,  3,  0,
+     0, -3, -6, -9,-12,-15,-18,-20,-23,-25,-27,-29,-30,-31,-31,-31,
+   -31,-31,-31,-30,-29,-27,-25,-23,-20,-18,-15,-12, -9, -6, -3,  0,
+};
+
 /* ------------------------------ game state ------------------------ */
 
 typedef enum { S_TITLE, S_PLAYING, S_LEVEL_CLEAR, S_GAME_OVER, S_WIN,
-               S_PAUSED, S_DEAD } state_t;
+               S_PAUSED, S_DEAD, S_INTRO } state_t;
 
 static state_t state;
 static int     level_idx;
 static int     score;
 static int     coins;
 static int     lives;
-static int     high_score;  /* best score of this power-on session */
+static int     high_score;  /* best score (persisted in flash) */
 static int     cam_x;
 static int     clear_timer;  /* frames left on the LEVEL CLEAR screen */
 static int     dead_timer;   /* frames left on the death screen */
+static int     intro_timer;  /* frames left on the WORLD intro card */
+static int     flash_timer;  /* white flash when the flag is reached */
 
 /* ------------------------------ prototypes ------------------------ */
 
@@ -263,6 +321,8 @@ static void start_level(int n)
 {
     const char *src = levels[n];
     enemy_count = 0;
+    mover_count = 0;
+    ride = -1;
 
     for (int ty = 0; ty < LEVEL_ROWS; ty++) {
         for (int tx = 0; tx < LEVEL_COLS; tx++) {
@@ -283,6 +343,18 @@ static void start_level(int n)
                 }
                 t = T_AIR;
                 break;
+            case 'M':   /* moving platform anchor */
+                if (mover_count < MAX_MOVERS) {
+                    movers[mover_count].x = tx * TILE;
+                    movers[mover_count].y = ty * TILE;
+                    movers[mover_count].base_y = ty * TILE;
+                    movers[mover_count].amp = 26;
+                    movers[mover_count].phase = 0;
+                    movers[mover_count].dy = 0;
+                    mover_count++;
+                }
+                t = T_AIR;
+                break;
             default:
                 break;
             }
@@ -294,37 +366,113 @@ static void start_level(int n)
     player.on_ground = false;
     player.facing_right = true;
     cam_x = 0;
-    state = S_PLAYING;
+    bg_drawn = false;              /* redraw the static background */
+    intro_timer = 40;              /* "WORLD N" card, then play */
+    state = S_INTRO;
+}
+
+/* moving platforms: swing up/down on a sine */
+static void update_movers(void)
+{
+    for (int i = 0; i < mover_count; i++) {
+        mover_t *m = &movers[i];
+        int prev = m->y;
+        m->phase = (m->phase + 1) & 63;
+        m->y = m->base_y + m->amp * MOV_SIN[m->phase] / 31;
+        m->dy = m->y - prev;
+    }
 }
 
 /* ------------------------------ physics --------------------------- */
 
-#define GRAVITY      1
-#define MAX_FALL     12
-#define JUMP_VEL     -11
-#define JUMP_CUT     -4    /* rising speed after CENTER is released */
-#define MOVE_SPEED   3
+/* --- physics (Mario-feel constants) --- */
+#define MAX_SPEED     3
+#define ACCEL         1    /* px/frame^2 while a direction is held */
+#define DECEL         1    /* friction when no direction is held   */
+#define SKID_SPEED    2    /* |vx| at which a turn-around skids     */
+#define GRAVITY_RISE  1    /* gravity while moving up              */
+#define GRAVITY_FALL  2    /* gravity while falling (snappier)     */
+#define MAX_FALL      12
+#define JUMP_VEL      -11
+#define JUMP_CUT      -4    /* rising speed after B1 is released   */
+#define COYOTE_FRAMES 4     /* frames of grace after leaving a ledge */
+#define JUMP_BUFFER   6     /* frames to buffer a jump before landing */
+
+/* --- player physics state (coyote time, jump buffering, skid) --- */
+static int  coyote;        /* frames left in which a jump is still legal */
+static int  jump_buffer;   /* frames left to auto-jump after landing     */
+static bool skidding;
+static bool prev_center;   /* edge detection for the B1 button           */
 
 static void update_player(void)
 {
     bool left  = input_held(DIR_LEFT);
     bool right = input_held(DIR_RIGHT);
+    bool center = input_held(DIR_CENTER);
 
-    player.vx = (right ? MOVE_SPEED : 0) - (left ? MOVE_SPEED : 0);
+    /* --- horizontal: accelerate / decelerate / skid --- */
+    if (right && !left) {
+        if (player.vx < 0 && player.vx <= -SKID_SPEED)
+            skidding = true;                 /* turn-around skid */
+        player.vx += ACCEL;
+        if (player.vx > MAX_SPEED) player.vx = MAX_SPEED;
+    } else if (left && !right) {
+        if (player.vx > 0 && player.vx >= SKID_SPEED)
+            skidding = true;
+        player.vx -= ACCEL;
+        if (player.vx < -MAX_SPEED) player.vx = -MAX_SPEED;
+    } else {
+        /* no input: friction */
+        if (player.vx > 0) { player.vx -= DECEL; if (player.vx < 0) player.vx = 0; }
+        if (player.vx < 0) { player.vx += DECEL; if (player.vx > 0) player.vx = 0; }
+        skidding = false;
+    }
     if (player.vx > 0) player.facing_right = true;
     if (player.vx < 0) player.facing_right = false;
 
-    /* jump: CENTER (currently the blue B1 button) */
-    if (input_held(DIR_CENTER) && player.on_ground)
-        player.vy = JUMP_VEL;
+    /* running / skidding dust */
+    if (player.on_ground && (player.vx == MAX_SPEED || player.vx == -MAX_SPEED
+                             || skidding) && (frame & 5) == 0) {
+        spawn_burst(player.x + (player.vx > 0 ? 0 : MARIO_W) - cam_x,
+                    player.y + MARIO_H - 2, C_GRAY, 1);
+    }
 
-    /* gravity */
-    player.vy += GRAVITY;
+    /* --- jumping: coyote time + buffering --- */
+    if (center && !prev_center)
+        jump_buffer = JUMP_BUFFER;           /* arm the buffer */
+    prev_center = center;
+
+    if (player.on_ground) coyote = COYOTE_FRAMES;
+    else if (coyote > 0) coyote--;
+
+    if ((center || jump_buffer > 0) && (player.on_ground || coyote > 0)) {
+        player.vy = JUMP_VEL;
+        player.on_ground = false;
+        coyote = 0;
+        jump_buffer = 0;
+    }
+    if (jump_buffer > 0) jump_buffer--;
+
+    /* --- gravity: rises gently, falls snappy --- */
+    if (player.vy < 0) {
+        player.vy += GRAVITY_RISE;
+        /* variable jump height: releasing B1 cuts the rise short */
+        if (player.vy < JUMP_CUT && !center)
+            player.vy = JUMP_CUT;
+    } else {
+        player.vy += GRAVITY_FALL;
+    }
     if (player.vy > MAX_FALL) player.vy = MAX_FALL;
 
-    /* variable jump height: releasing CENTER cuts the rise short */
-    if (player.vy < JUMP_CUT && !input_held(DIR_CENTER))
-        player.vy = JUMP_CUT;
+    /* ride the moving platform we stand on */
+    if (ride >= 0) {
+        mover_t *m = &movers[ride];
+        if (overlap(player.x, player.y + MARIO_H - 2, MARIO_W, 2,
+                    m->x, m->y - 4, MOV_W, 10))
+            player.y += m->dy;
+        else
+            ride = -1;
+    }
 
     /* --- vertical move with collision --- */
     bool was_ground = player.on_ground;
@@ -332,6 +480,7 @@ static void update_player(void)
         /* falling: check the feet line */
         int ny = player.y + player.vy;
         int feet = ny + MARIO_H;
+        bool landed = false;
         if (box_hits(player.x + 1, feet - 1, MARIO_W - 2, 1)) {
             player.y = (feet / TILE) * TILE - MARIO_H;   /* snap on top */
             if (!was_ground && player.vy >= 5) {
@@ -343,7 +492,24 @@ static void update_player(void)
             }
             player.vy = 0;
             player.on_ground = true;
-        } else {
+            landed = true;
+        }
+        if (!landed) {
+            /* land on a moving platform? */
+            for (int i = 0; i < mover_count; i++) {
+                mover_t *m = &movers[i];
+                if (overlap(player.x, player.y + MARIO_H - 2, MARIO_W, 3,
+                            m->x, m->y - 2, MOV_W, 8)) {
+                    player.y = m->y - MARIO_H;
+                    player.vy = 0;
+                    player.on_ground = true;
+                    ride = i;
+                    landed = true;
+                    break;
+                }
+            }
+        }
+        if (!landed) {
             player.y = ny;
             player.on_ground = false;
         }
@@ -353,7 +519,7 @@ static void update_player(void)
         if (box_hits(player.x + 1, ny, MARIO_W - 2, 1)) {
             player.y = (ny / TILE + 1) * TILE;           /* snap below */
             player.vy = 0;
-            /* bump a ? block from below -> coin + used block */
+            /* bump blocks from below */
             int hty = ny / TILE;
             int hx0 = (player.x + 1) / TILE;
             int hx1 = (player.x + MARIO_W - 2) / TILE;
@@ -361,10 +527,21 @@ static void update_player(void)
                 if (tx < 0 || tx >= LEVEL_COLS || hty < 0 || hty >= LEVEL_ROWS)
                     continue;
                 if (grid[hty][tx] == T_QB) {
+                    /* ? block -> coin pops out */
                     grid[hty][tx] = T_QB_USED;
                     score += 10;
                     coins++;
                     spawn_burst(tx * TILE + 8 - cam_x, hty * TILE, C_GOLD, 6);
+                    pop.x = tx * TILE + 4 - cam_x;
+                    pop.y = hty * TILE - 10;
+                    pop.vy = -7;
+                    pop.life = 30;
+                } else if (grid[hty][tx] == T_BRICK) {
+                    /* brick shatters */
+                    grid[hty][tx] = T_AIR;
+                    score += 10;
+                    spawn_burst(tx * TILE + 8 - cam_x, hty * TILE + 8,
+                                C_ORANGE, 8);
                 }
             }
         } else {
@@ -395,9 +572,16 @@ static void update_player(void)
                 grid[ty][tx] = T_AIR;
                 score += 10;
                 coins++;
-                /* golden sparkle */
-                spawn_burst(tx * TILE + 8 - cam_x, ty * TILE + 8,
-                            C_GOLD, 6);
+                /* 100 coins = one extra life (classic) */
+                if (coins >= 100) {
+                    coins -= 100;
+                    if (lives < 9) lives++;
+                    spawn_burst(tx * TILE + 8 - cam_x, ty * TILE + 8,
+                                C_GOLD, 12);
+                } else {
+                    spawn_burst(tx * TILE + 8 - cam_x, ty * TILE + 8,
+                                C_GOLD, 6);
+                }
             }
         }
 
@@ -406,7 +590,8 @@ static void update_player(void)
     for (int ty = 0; ty < LEVEL_ROWS; ty++) {
         if (grid[ty][ptx] == T_FLAG) {
             score += 100;
-            clear_timer = 30;          /* ~1.5 s at 20 fps */
+            flash_timer = 4;           /* white flash */
+            clear_timer = 40;          /* LEVEL CLEAR screen */
             state = S_LEVEL_CLEAR;
             return;
         }
@@ -458,8 +643,11 @@ static void update_enemies(void)
 
 static void player_die(void)
 {
-    shake_timer = 18;              /* screen shake on the death screen */
-    dead_timer = 25;               /* short death screen (~1.2 s)      */
+    shake_timer = 18;              /* screen shake during the death    */
+    player.vy = -9;                /* classic Mario death: pop up,     */
+    player.vx = 0;                 /* then fall off the screen         */
+    player.on_ground = false;
+    dead_timer = 70;
     state = S_DEAD;
 }
 
@@ -638,35 +826,46 @@ static void draw_mountains(uint8_t color, int scroll, int amp, int base)
 static void render_world(void)
 {
     int cam = cam_x + shake_x;   /* shake_x: +-2 px during the death screen */
+    bool night = (level_idx == 4);   /* level 5 is the night level */
 
-    /* sky gradient: deep blue at the top, pale at the horizon */
-    for (int y = 0; y < 200; y++)
-        lcd_rect(0, y, LCD_W - 1, y,
-                 (uint8_t)(C_SKY_TOP +
-                           (199 - y) * (C_SKY_HORIZON - C_SKY_TOP) / 199));
+    /* the static background (sky + horizon band) is drawn ONCE per
+     * level — dirty-row flushing keeps it on the panel afterwards */
+    if (!bg_drawn) {
+        int top = night ? C_NIGHT_TOP : C_SKY_TOP;
+        int hor = night ? C_NIGHT_HORIZ : C_SKY_HORIZON;
+        for (int y = 0; y < 200; y++)
+            lcd_rect(0, y, LCD_W - 1, y,
+                     (uint8_t)(top + (199 - y) * (hor - top) / 199));
+        for (int y = 200; y < LCD_H; y++)
+            lcd_rect(0, y, LCD_W - 1, y, hor);
+        bg_drawn = true;
+    }
 
-    /* below the horizon: repaint EVERY frame, otherwise tiles that
-     * scroll left would leave a trail in the framebuffer */
-    for (int y = 200; y < LCD_H; y++)
-        lcd_rect(0, y, LCD_W - 1, y, C_SKY_HORIZON);
+    /* night level: a field of static stars */
+    if (night) {
+        for (int i = 0; i < 24; i++)
+            lcd_px((i * 97) % 240, (i * 53) % 150 + 8, C_WHITE);
+    }
 
     /* two parallax layers of NES-style green hills + drifting clouds */
-    draw_mountains(C_MOUNT_FAR,  cam / 6, 45, 150);
-    draw_mountains(C_MOUNT_NEAR, cam / 3, 30, 175);
+    draw_mountains(night ? C_NIGHT_HILL_FAR : C_MOUNT_FAR,
+                   cam / 6, 45, 150);
+    draw_mountains(night ? C_NIGHT_HILL_NEAR : C_MOUNT_NEAR,
+                   cam / 3, 30, 175);
 
     /* bushes along the horizon */
     for (int i = 0; i < 4; i++) {
         int bx = ((i * 80 - cam / 2) % 320 + 320) % 320 - 30;
-        lcd_rect(bx, 186, bx + 24, 198, C_MOUNT_NEAR);
-        lcd_rect(bx + 4, 182, bx + 16, 186, C_MOUNT_NEAR);
-        lcd_rect(bx + 8, 179, bx + 13, 182, C_MOUNT_FAR);
+        lcd_rect(bx, 186, bx + 24, 198, night ? C_NIGHT_HILL_NEAR : C_MOUNT_NEAR);
+        lcd_rect(bx + 4, 182, bx + 16, 186, night ? C_NIGHT_HILL_NEAR : C_MOUNT_NEAR);
+        lcd_rect(bx + 8, 179, bx + 13, 182, night ? C_NIGHT_HILL_FAR : C_MOUNT_FAR);
     }
 
     int p1 = (cam / 6) % 280 - 20;
     int p2 = (cam / 4) % 280 - 20;
-    lcd_rect(p1, 22, p1 + 30, 32, C_WHITE);
-    lcd_rect(p2 + 90, 48, p2 + 126, 60, C_WHITE);
-    lcd_rect(p1 + 160, 70, p1 + 186, 78, C_WHITE);
+    lcd_rect(p1, 22, p1 + 30, 32, night ? C_GRAY : C_WHITE);
+    lcd_rect(p2 + 90, 48, p2 + 126, 60, night ? C_GRAY : C_WHITE);
+    lcd_rect(p1 + 160, 70, p1 + 186, 78, night ? C_GRAY : C_WHITE);
 
     int cam_tile = cam / TILE;
     int off = cam % TILE;
@@ -679,6 +878,17 @@ static void render_world(void)
             if (t == T_AIR) continue;
             draw_tile(vx * TILE - off, ty * TILE, tx, t);
         }
+    }
+
+    /* moving platforms */
+    for (int i = 0; i < mover_count; i++) {
+        mover_t *m = &movers[i];
+        int mx = m->x - cam;
+        lcd_rect(mx, m->y, mx + MOV_W - 1, m->y + MOV_H - 1, C_ORANGE);
+        lcd_rect(mx, m->y, mx + MOV_W - 1, m->y, C_BRICK_HI);
+        lcd_rect(mx, m->y + MOV_H - 1, mx + MOV_W - 1, m->y + MOV_H - 1, C_BLACK);
+        lcd_px(mx + 3, m->y + MOV_H / 2, C_DARK_GRAY);
+        lcd_px(mx + MOV_W - 4, m->y + MOV_H / 2, C_DARK_GRAY);
     }
 
     /* enemies */
@@ -709,6 +919,11 @@ static void draw_hud(void)
     lcd_text(80, 2, "x", C_WHITE, C_BLACK, 1);
     fmt_int(buf, lives);
     lcd_text(88, 2, buf, C_WHITE, C_BLACK, 1);
+
+    /* coin counter */
+    lcd_text(112, 2, "C", C_YELLOW, C_BLACK, 1);
+    fmt_int(buf, coins);
+    lcd_text(120, 2, buf, C_WHITE, C_BLACK, 1);
 
     lcd_text(190, 2, "LV", C_WHITE, C_BLACK, 1);
     fmt_int(buf, level_idx + 1);
@@ -786,12 +1001,60 @@ static void render_win(void)
 
 /* ------------------------------ main loop ------------------------- */
 
+/*
+ * High score persistence: the LAST 2 KB flash page (page 511 of the
+ * 1 MB L476RG flash) stores a magic word + the score. Saved only at
+ * game over / win, so the brief flash stall is never felt mid-game.
+ */
+#define HS_PAGE_BASE 0x080FF800UL
+#define HS_MAGIC     0x4D415249UL   /* "MARI" */
+
+static void flash_wait(void)
+{
+    volatile uint32_t *sr = (volatile uint32_t *)(0x40022000UL + 0x10);
+    while (*sr & (1u << 16)) {}     /* BSY */
+}
+
+static void flash_unlock(void)
+{
+    volatile uint32_t *keyr = (volatile uint32_t *)(0x40022000UL + 0x08);
+    *keyr = 0x45670123UL;
+    *keyr = 0xCDEF89ABUL;
+}
+
+static void highscore_save(void)
+{
+    volatile uint32_t *cr = (volatile uint32_t *)(0x40022000UL + 0x14);
+
+    flash_unlock();
+    *cr |= (1u << 1);                       /* PER */
+    *cr = (*cr & ~(0xFFu << 3)) | (511u << 3);   /* page 511 */
+    *cr |= (1u << 16);                      /* STRT */
+    flash_wait();
+    *cr &= ~(1u << 1);
+    *cr |= (1u << 0);                       /* PG */
+    *(volatile uint32_t *)HS_PAGE_BASE = HS_MAGIC;
+    flash_wait();
+    *(volatile uint32_t *)(HS_PAGE_BASE + 4) = (uint32_t)high_score;
+    flash_wait();
+    *cr |= (1u << 31);                      /* LOCK */
+}
+
+static void highscore_load(void)
+{
+    if (*(volatile uint32_t *)HS_PAGE_BASE == HS_MAGIC)
+        high_score = (int)*(volatile uint32_t *)(HS_PAGE_BASE + 4);
+    else
+        high_score = 0;
+}
+
 void game_run(void)
 {
     score = 0;
     coins = 0;
     lives = 3;
     level_idx = 0;
+    highscore_load();      /* best score survives power cycles */
     state = S_TITLE;
 
     for (;;) {
@@ -805,6 +1068,12 @@ void game_run(void)
             shake_x = 0;
         }
         update_particles();
+        /* the popping coin flies and falls */
+        if (pop.life > 0) {
+            pop.y += pop.vy;
+            pop.vy += 1;
+            pop.life--;
+        }
 
         dir_t press = input_read();
 
@@ -815,11 +1084,30 @@ void game_run(void)
             if (press == DIR_CENTER) start_level(0);
             break;
 
+        case S_INTRO:
+            /* "WORLD N" card over the frozen world, then play */
+            render_world();
+            draw_hud();
+            lcd_rect(36, 130, 204, 172, C_BLACK);
+            {
+                char buf[8];
+                lcd_text(90, 138, "WORLD", C_WHITE, C_BLACK, 1);
+                fmt_int(buf, level_idx + 1);
+                lcd_text(110, 152, buf, C_YELLOW, C_BLACK, 2);
+            }
+            lcd_flush();
+            if (--intro_timer <= 0) {
+                state = S_PLAYING;
+                bg_drawn = false;      /* redraw under the card */
+            }
+            break;
+
         case S_PLAYING:
             if (press == DIR_DOWN) {
                 state = S_PAUSED;      /* DOWN toggles pause */
                 break;
             }
+            update_movers();
             update_player();
             update_enemies();
             update_camera();
@@ -831,22 +1119,28 @@ void game_run(void)
         case S_PAUSED:
             render_pause();
             lcd_flush();
-            if (press == DIR_DOWN || press == DIR_CENTER)
+            if (press == DIR_DOWN || press == DIR_CENTER) {
                 state = S_PLAYING;
+                bg_drawn = false;      /* redraw under the overlay */
+            }
             break;
 
         case S_DEAD:
-            /* the world stays visible, shaken, with a death plate */
+            /* classic death: Mario pops up and falls off the screen */
+            player.vy += GRAVITY_FALL;
+            if (player.vy > MAX_FALL) player.vy = MAX_FALL;
+            player.y += player.vy;
             render_world();
             draw_hud();
-            lcd_rect(56, 138, 184, 158, C_BLACK);
-            lcd_text(68, 142, "OUCH!", C_RED, C_BLACK, 2);
             lcd_flush();
             if (--dead_timer <= 0) {
                 lives--;
                 if (lives <= 0) {
                     lives = 0;
-                    if (score > high_score) high_score = score;
+                    if (score > high_score) {
+                        high_score = score;
+                        highscore_save();
+                    }
                     state = S_GAME_OVER;
                 } else {
                     start_level(level_idx);
@@ -855,12 +1149,21 @@ void game_run(void)
             break;
 
         case S_LEVEL_CLEAR:
-            render_level_clear();
+            if (flash_timer > 0) {
+                /* white flash first */
+                lcd_clear(C_WHITE);
+                flash_timer--;
+            } else {
+                render_level_clear();
+            }
             lcd_flush();
             if (--clear_timer <= 0) {
                 level_idx++;
                 if (level_idx >= LEVEL_COUNT) {
-                    if (score > high_score) high_score = score;
+                    if (score > high_score) {
+                        high_score = score;
+                        highscore_save();
+                    }
                     state = S_WIN;
                 } else {
                     start_level(level_idx);
