@@ -1,16 +1,18 @@
 /*
  * input.c — joystick + button input.
  *
- * THE PIN MAP (single source of truth, per UM2750 group 8 = L476RG):
+ * THE PIN MAP (single source of truth):
  *
- *   DIR_LEFT   = PA4
- *   DIR_RIGHT  = PB4
- *   DIR_UP     = PB13
- *   DIR_DOWN   = PA15
- *   DIR_CENTER = PC13   (TEMPORARY: the blue USER button B1 — the
- *                        shield's center press is still being verified
- *                        with the joystick scanner; B1 acts as the
- *                        action/jump button meanwhile)
+ *   DIR_LEFT   = PB4   (verified with the joystick scanner)
+ *   DIR_RIGHT  = PC0   (verified)
+ *   DIR_DOWN   = PB0   (verified)
+ *   DIR_CENTER = PC7   (verified — the joystick center press)
+ *   DIR_UP     = PB13  (not detected on this shield build; the game
+ *                       does not use UP, so it maps to a floating pin)
+ *
+ * NOTE: PA0 reads permanently LOW with the shield mounted (a shield
+ * quirk), so it must NOT be used in the map — a stuck pin would make
+ * input_read() report a phantom press every frame.
  *
  * All switches are active-low (pressed = pin reads 0).
  * To change a pin, edit this table and nothing else.
@@ -24,11 +26,11 @@
 typedef struct { uint8_t port; uint8_t pin; } pin_t;
 
 static const pin_t joy_map[DIR_COUNT] = {
-    [DIR_UP]     = { PORT_B, 13 },
-    [DIR_DOWN]   = { PORT_A, 15 },
-    [DIR_LEFT]   = { PORT_A, 4  },
-    [DIR_RIGHT]  = { PORT_B, 4  },
-    [DIR_CENTER] = { PORT_C, 13 },   /* USER button B1 */
+    [DIR_UP]     = { PORT_B, 13 },   /* floating (unused by the game) */
+    [DIR_DOWN]   = { PORT_B, 0  },
+    [DIR_LEFT]   = { PORT_B, 4  },
+    [DIR_RIGHT]  = { PORT_C, 0  },
+    [DIR_CENTER] = { PORT_C, 7  },
 };
 
 /*

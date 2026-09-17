@@ -491,8 +491,8 @@ static void render_title(void)
     lcd_sprite(mario_sprite[0], MARIO_W, MARIO_H, 114, 140, SPR_TRANSPARENT);
 
     lcd_text(24, 220, "LEFT/RIGHT: move", C_WHITE, C_DARK_GREEN, 1);
-    lcd_text(24, 238, "B1 (blue): jump", C_WHITE, C_DARK_GREEN, 1);
-    lcd_text(24, 262, "PRESS B1 TO START", C_YELLOW, C_DARK_GREEN, 2);
+    lcd_text(24, 238, "CENTER: jump", C_WHITE, C_DARK_GREEN, 1);
+    lcd_text(24, 262, "PRESS CENTER TO START", C_YELLOW, C_DARK_GREEN, 2);
 }
 
 static void render_game_over(void)
@@ -504,7 +504,7 @@ static void render_game_over(void)
     fmt_int(buf, score);
     lcd_text(96, 210, "SCORE", C_WHITE, C_BLACK, 1);
     lcd_text(108, 228, buf, C_YELLOW, C_BLACK, 2);
-    lcd_text(40, 280, "B1 = RETRY", C_GREEN, C_BLACK, 1);
+    lcd_text(40, 280, "CENTER = RETRY", C_GREEN, C_BLACK, 1);
 }
 
 static void render_win(void)
@@ -515,7 +515,7 @@ static void render_win(void)
     fmt_int(buf, score);
     lcd_text(60, 180, "SCORE", C_WHITE, C_BLACK, 1);
     lcd_text(96, 198, buf, C_YELLOW, C_BLACK, 2);
-    lcd_text(40, 260, "B1 = MENU", C_GREEN, C_BLACK, 1);
+    lcd_text(40, 260, "CENTER = MENU", C_GREEN, C_BLACK, 1);
 }
 
 /* ------------------------------ main loop ------------------------- */
