@@ -44,7 +44,8 @@
 enum { T_AIR = '.', T_GROUND = '#', T_BRICK = 'B',
        T_COIN = 'C', T_ENEMY = 'E', T_FLAG = 'F', T_PLAYER = 'P',
        T_QB = '?', T_QB_USED = 'U', T_PIPE = 'T',
-       T_MUSH = 'G', T_STAR = 'S' };
+       T_MUSH = 'G', T_STAR = 'S',
+       T_TREE = 'Y', T_ROCK = 'R' };
 
 static const char level1[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "................................................................",
@@ -63,8 +64,8 @@ static const char level1[LEVEL_ROWS][LEVEL_COLS + 1] = {
     ".....................E.............G...................S........",
     "..........CCC.......BBBB......CCC.......BBB.......CCC...........",
     "................................................................",
-    "..........BBB.................BBB.................BBB...........",
-    "..P....TT.........................C.C.C.........................",
+    ".....Y....BBB.................BBB........Y........BBB...........",
+    "..P....TT......R.....C.C.C..........................R...........",
     "#######TT#######################################################",
     "################################################################",
 };
@@ -87,7 +88,7 @@ static const char level2[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "........................BBB......BBB............................",
     "................................................................",
     ".................BB...C.......C.................C...............",
-    "..P.......TT......................................E..TT.........",
+    "..P..Y....TT................R........Y.......E..TT..............",
     "##########TT###....######################....########TT#########",
     "###############....######################....###################",
 };
@@ -102,15 +103,15 @@ static const char level3[LEVEL_ROWS][LEVEL_COLS + 1] = {
     ".............................................................F..",
     "................................................................",
     "................................................................",
-    "...........BB.................................................",
-    "..........CCB................................................",
+    "...........BB...................................................",
+    "..........CCB...................................................",
     "................................................................",
-    ".........BB..................................................",
+    ".........BB.....................................................",
     "................G.........CCC.....BBB.....CSC.....BBB...........",
     "..................................CCC......E......CCC...........",
     "......BB..................BBB.............BBB...................",
-    "........................................C..............C........",
-    ".P.ETT..........E..........TT...................................",
+    ".....Y..................................C..............C........",
+    ".P.ETT..........E..........TT....Y...................R..........",
     "####TT#####...#######...###TT###################################",
     "###########...#######...########################################",
 };
@@ -126,14 +127,14 @@ static const char level4[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "................................................................",
     ".............CCC............................CCC.................",
     "........................CCC.....................................",
-    "........BBB....................................................",
+    "........BBB.....................................................",
     "........CCC.............BBB.............CCC.....................",
     "....................CCC.....CCC......E..................E.......",
     "........BBB......G....E...............S.BBB.............BBB.....",
     "........BBB.........BBB.....BBB.........BBB.............BBB.....",
     "................................................................",
     "................................................................",
-    ".PE...TT.........................CC....CCC................TT....",
+    ".PE...TT..........Y..............CC....CCC....R...........TT....",
     "######TT####....###############....##############....#####TT####",
     "############....###############....##############....###########",
 };
@@ -156,7 +157,7 @@ static const char level5[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "......BBB...............BMB....M...............M........BBB.....",
     "................................................................",
     "......................C.........................................",
-    ".PE...........................CC........C...........C.......C...",
+    ".PEY........................CCR.......C......R....C.......C.....",
     "############....##############....############....##############",
     "############....##############....############....##############",
 };
@@ -419,6 +420,29 @@ static void update_powerup(void)
 {
     if (!powup.active) return;
 
+    /* Player pickup FIRST: it works even while the power-up is still
+     * emerging from the block (you can grab it as it pops out), and
+     * this runs after update_player, so landing right on a walking
+     * mushroom always collects it. */
+    if (overlap(player.x, player.y, MARIO_W, mario_h(),
+                powup.x, powup.y, 12, 12)) {
+        powup.active = false;
+        score += 100;
+        if (powup.star) {
+            star_timer = 100;       /* ~6 s of touch-death invincibility */
+        } else {
+            player.big = true;      /* grow! */
+            /* keep the feet planted: raise the top by the extra height */
+            player.y -= MARIO_BIG_H - MARIO_H;
+            /* classic: stomping the mushroom gives a little bounce */
+            if (player.vy > 0 &&
+                (player.y + mario_h() - powup.y) < 8)
+                player.vy = -6;
+        }
+        spawn_burst(powup.x - cam_x, powup.y, C_GOLD, 10);
+        return;
+    }
+
     if (powup.rising > 0) {         /* emerge from the block */
         powup.rising--;
         powup.y--;
@@ -457,21 +481,6 @@ static void update_powerup(void)
     }
 
     if (powup.y > LCD_H + 32) powup.active = false;
-
-    /* player pickup */
-    if (overlap(player.x, player.y, MARIO_W, mario_h(),
-                powup.x, powup.y, 12, 12)) {
-        powup.active = false;
-        score += 100;
-        if (powup.star) {
-            star_timer = 100;       /* ~6 s of touch-death invincibility */
-        } else {
-            player.big = true;      /* grow! */
-            /* keep the feet planted: raise the top by the extra height */
-            player.y -= MARIO_BIG_H - MARIO_H;
-        }
-        spawn_burst(powup.x - cam_x, powup.y, C_GOLD, 10);
-    }
 }
 
 static void start_level(int n)
@@ -1068,6 +1077,39 @@ static void draw_tile(int sx, int sy, int tx, uint8_t t)
         }
         break;
 
+    case T_TREE:
+        /* background tree: a fluffy crown above the tile and a trunk
+         * running down to the first solid tile. Pure decoration —
+         * not solid, Mario walks behind it. */
+        {
+            bool nite = (level_idx == 4);   /* darker crown at night */
+            uint8_t crown  = nite ? C_NIGHT_HILL_NEAR : C_GREEN;
+            uint8_t crown2 = nite ? C_NIGHT_HILL_FAR : C_DARK_GREEN;
+            lcd_rect(sx + 1, sy - 20, sx + 14, sy - 1, crown);
+            lcd_rect(sx + 3, sy - 26, sx + 12, sy - 21, crown);
+            lcd_rect(sx + 5, sy - 32, sx + 10, sy - 27, crown);
+            lcd_px(sx + 3, sy - 4, crown2);
+            lcd_px(sx + 12, sy - 8, crown2);
+            lcd_px(sx + 6, sy - 14, crown2);
+            lcd_px(sx + 9, sy - 22, crown2);
+            lcd_px(sx + 7, sy - 30, crown2);
+            for (int tty = ty; tty < LEVEL_ROWS; tty++) {
+                lcd_rect(sx + 7, tty * TILE, sx + 8, tty * TILE + TILE - 1,
+                         C_BROWN);
+                if (solid_tile(grid[tty][tx])) break;
+            }
+        }
+        break;
+
+    case T_ROCK:
+        /* a small gray boulder sitting on the ground (decoration) */
+        lcd_rect(sx + 2, sy + 7, sx + 13, sy + 15, C_GRAY);
+        lcd_rect(sx + 2, sy + 7, sx + 13, sy + 9, C_WHITE);
+        lcd_rect(sx + 2, sy + 14, sx + 13, sy + 15, C_DARK_GRAY);
+        lcd_px(sx + 4, sy + 11, C_DARK_GRAY);
+        lcd_px(sx + 10, sy + 12, C_DARK_GRAY);
+        break;
+
     default:
         break;
     }
@@ -1168,11 +1210,14 @@ static void render_world(void)
         lcd_rect(bx + 8, 179, bx + 13, 182, night ? C_NIGHT_HILL_FAR : C_MOUNT_FAR);
     }
 
-    /* puffy clouds (day: white with a shaded base, night: gray) */
+    /* puffy clouds (day: white with a shaded base, night: gray).
+     * They drift on their own AND parallax with the camera; the two
+     * layers move at different speeds for depth. */
     uint8_t cc = night ? C_GRAY : C_WHITE;
     uint8_t cs = night ? C_DARK_GRAY : C_MAGENTA;
-    int p1 = (cam / 6) % 280 - 20;
-    int p2 = (cam / 4) % 280 - 20;
+    int drift = (int)(frame % 280);           /* 1 px per frame */
+    int p1 = ((cam / 6 + drift) % 280) - 20;
+    int p2 = ((cam / 4 + drift / 2) % 280) - 20;
     draw_cloud(p1, 22, cc, cs, 1);
     draw_cloud(p2 + 90, 48, cc, cs, 2);
     draw_cloud(p1 + 160, 70, cc, cs, 1);
@@ -1455,8 +1500,9 @@ void game_run(void)
                 }
             }
             update_movers();
-            update_powerup();
             update_player();
+            update_powerup();   /* after the player: landing on a
+                                   walking mushroom always collects it */
             update_enemies();
             update_camera();
             render_world();
