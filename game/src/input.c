@@ -76,7 +76,7 @@ dir_t input_read(void)
     }
 
     if ((int)pressed == last) {
-        stable++;
+        if (stable < 250) stable++;   /* clamp: no wraparound phantom press */
     } else {
         last = (int)pressed;
         stable = 1;

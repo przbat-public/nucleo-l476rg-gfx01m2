@@ -47,22 +47,38 @@ static const uint8_t mario_sprite[MARIO_H][MARIO_W] = {
     { P_S, P_S, P_, P_, P_, P_, P_, P_, P_, P_S, P_S, P_ },
 };
 
-/* Goomba-like walker, 12 x 12 */
+/* Goomba-like walker, 12 x 12 (two walk frames) */
 #define ENEMY_W 12
 #define ENEMY_H 12
-static const uint8_t enemy_sprite[ENEMY_H][ENEMY_W] = {
-    { P_, P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_, P_ },
-    { P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_ },
-    { P_BR, P_K, P_K, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_K, P_K, P_BR },
-    { P_BR, P_K, P_K, P_S, P_S, P_S, P_S, P_S, P_S, P_K, P_K, P_BR },
-    { P_BR, P_BR, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_BR, P_BR },
-    { P_, P_BR, P_BR, P_S, P_S, P_S, P_S, P_S, P_S, P_BR, P_BR, P_ },
-    { P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_ },
-    { P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR },
-    { P_BR, P_BR, P_BR, P_, P_BR, P_BR, P_BR, P_BR, P_, P_BR, P_BR, P_BR },
-    { P_BR, P_BR, P_, P_, P_, P_BR, P_BR, P_, P_, P_, P_BR, P_BR },
-    { P_BR, P_BR, P_, P_, P_, P_, P_, P_, P_, P_, P_BR, P_BR },
-    { P_K, P_K, P_, P_, P_, P_, P_, P_, P_, P_, P_K, P_K },
+static const uint8_t enemy_sprite[2][ENEMY_H][ENEMY_W] = {
+    { /* frame 0 */
+        { P_, P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_, P_ },
+        { P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_ },
+        { P_BR, P_K, P_K, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_K, P_K, P_BR },
+        { P_BR, P_K, P_K, P_S, P_S, P_S, P_S, P_S, P_S, P_K, P_K, P_BR },
+        { P_BR, P_BR, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_BR, P_BR },
+        { P_, P_BR, P_BR, P_S, P_S, P_S, P_S, P_S, P_S, P_BR, P_BR, P_ },
+        { P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_ },
+        { P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR },
+        { P_BR, P_BR, P_BR, P_, P_BR, P_BR, P_BR, P_BR, P_, P_BR, P_BR, P_BR },
+        { P_BR, P_BR, P_, P_, P_, P_BR, P_BR, P_, P_, P_, P_BR, P_BR },
+        { P_BR, P_BR, P_, P_, P_, P_, P_, P_, P_, P_, P_BR, P_BR },
+        { P_K, P_K, P_, P_, P_, P_, P_, P_, P_, P_, P_K, P_K },
+    },
+    { /* frame 1 (feet swapped) */
+        { P_, P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_, P_ },
+        { P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_ },
+        { P_BR, P_K, P_K, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_K, P_K, P_BR },
+        { P_BR, P_K, P_K, P_S, P_S, P_S, P_S, P_S, P_S, P_K, P_K, P_BR },
+        { P_BR, P_BR, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_BR, P_BR },
+        { P_, P_BR, P_BR, P_S, P_S, P_S, P_S, P_S, P_S, P_BR, P_BR, P_ },
+        { P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_ },
+        { P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR },
+        { P_BR, P_BR, P_BR, P_, P_BR, P_BR, P_BR, P_BR, P_, P_BR, P_BR, P_BR },
+        { P_BR, P_BR, P_, P_, P_BR, P_BR, P_, P_, P_, P_BR, P_BR, P_ },
+        { P_BR, P_BR, P_, P_, P_BR, P_BR, P_, P_, P_, P_BR, P_BR, P_ },
+        { P_K, P_K, P_, P_, P_K, P_K, P_, P_, P_, P_K, P_K, P_ },
+    },
 };
 
 /* Coin, 8 x 8 (two frames: coin0 = wide, coin1 = narrow) */

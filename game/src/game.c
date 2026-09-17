@@ -124,14 +124,16 @@ static int      enemy_count;
 
 /* ------------------------------ game state ------------------------ */
 
-typedef enum { S_TITLE, S_PLAYING, S_GAME_OVER, S_WIN } state_t;
+typedef enum { S_TITLE, S_PLAYING, S_LEVEL_CLEAR, S_GAME_OVER, S_WIN } state_t;
 
 static state_t state;
 static int     level_idx;
 static int     score;
+static int     coins;
 static int     lives;
 static int     cam_x;
-static uint32_t frame;       /* frame counter (coin animation) */
+static int     clear_timer;  /* frames left on the LEVEL CLEAR screen */
+static uint32_t frame;       /* frame counter (animations) */
 
 /* ------------------------------ prototypes ------------------------ */
 
@@ -219,8 +221,9 @@ static void start_level(int n)
 
 #define GRAVITY      1
 #define MAX_FALL     12
-#define JUMP_VEL     -10
-#define MOVE_SPEED   2
+#define JUMP_VEL     -11
+#define JUMP_CUT     -4    /* rising speed after CENTER is released */
+#define MOVE_SPEED   3
 
 static void update_player(void)
 {
@@ -238,6 +241,10 @@ static void update_player(void)
     /* gravity */
     player.vy += GRAVITY;
     if (player.vy > MAX_FALL) player.vy = MAX_FALL;
+
+    /* variable jump height: releasing CENTER cuts the rise short */
+    if (player.vy < JUMP_CUT && !input_held(DIR_CENTER))
+        player.vy = JUMP_CUT;
 
     /* --- vertical move with collision --- */
     if (player.vy >= 0) {
@@ -285,6 +292,7 @@ static void update_player(void)
             if (grid[ty][tx] == T_COIN) {
                 grid[ty][tx] = T_AIR;
                 score += 10;
+                coins++;
             }
         }
 
@@ -292,9 +300,9 @@ static void update_player(void)
     int ptx = (player.x + MARIO_W / 2) / TILE;
     for (int ty = 0; ty < LEVEL_ROWS; ty++) {
         if (grid[ty][ptx] == T_FLAG) {
-            level_idx++;
-            if (level_idx >= LEVEL_COUNT) state = S_WIN;
-            else start_level(level_idx);
+            score += 100;
+            clear_timer = 30;          /* ~1.5 s at 20 fps */
+            state = S_LEVEL_CLEAR;
             return;
         }
     }
@@ -448,10 +456,11 @@ static void render_world(void)
     }
 
     /* enemies */
+    int ef = (int)((frame >> 4) & 1);   /* walk animation frame */
     for (int i = 0; i < enemy_count; i++) {
         enemy_t *e = &enemies[i];
         if (!e->alive) continue;
-        lcd_sprite(enemy_sprite[0], ENEMY_W, ENEMY_H,
+        lcd_sprite(enemy_sprite[ef][0], ENEMY_W, ENEMY_H,
                    e->x - cam_x, e->y, SPR_TRANSPARENT);
     }
 
@@ -464,17 +473,21 @@ static void draw_hud(void)
     lcd_rect(0, 0, LCD_W - 1, 11, C_BLACK);
     char buf[16];
 
-    lcd_text(2, 2, "SCORE", C_WHITE, C_BLACK, 1);
+    lcd_text(2, 2, "S", C_WHITE, C_BLACK, 1);
     fmt_int(buf, score);
-    lcd_text(36, 2, buf, C_YELLOW, C_BLACK, 1);
+    lcd_text(12, 2, buf, C_YELLOW, C_BLACK, 1);
 
-    lcd_text(120, 2, "LIVES", C_WHITE, C_BLACK, 1);
+    lcd_text(66, 2, "C", C_WHITE, C_BLACK, 1);
+    fmt_int(buf, coins);
+    lcd_text(76, 2, buf, C_GOLD, C_BLACK, 1);
+
+    lcd_text(132, 2, "L", C_WHITE, C_BLACK, 1);
     fmt_int(buf, lives);
-    lcd_text(152, 2, buf, C_RED, C_BLACK, 1);
+    lcd_text(142, 2, buf, C_RED, C_BLACK, 1);
 
-    lcd_text(190, 2, "LV", C_WHITE, C_BLACK, 1);
+    lcd_text(180, 2, "LV", C_WHITE, C_BLACK, 1);
     fmt_int(buf, level_idx + 1);
-    lcd_text(208, 2, buf, C_GREEN, C_BLACK, 1);
+    lcd_text(198, 2, buf, C_GREEN, C_BLACK, 1);
 }
 
 /* ------------------------------ screens --------------------------- */
@@ -493,6 +506,19 @@ static void render_title(void)
     lcd_text(24, 220, "LEFT/RIGHT: move", C_WHITE, C_DARK_GREEN, 1);
     lcd_text(24, 238, "CENTER: jump", C_WHITE, C_DARK_GREEN, 1);
     lcd_text(24, 262, "PRESS CENTER TO START", C_YELLOW, C_DARK_GREEN, 2);
+}
+
+static void render_level_clear(void)
+{
+    lcd_clear(C_BLACK);
+    char buf[16];
+    lcd_text(48, 90, "LEVEL", C_WHITE, C_BLACK, 3);
+    fmt_int(buf, level_idx + 1);
+    lcd_text(96, 126, buf, C_YELLOW, C_BLACK, 3);
+    lcd_text(84, 170, "CLEAR!", C_GREEN, C_BLACK, 2);
+    fmt_int(buf, score);
+    lcd_text(60, 240, "SCORE", C_WHITE, C_BLACK, 1);
+    lcd_text(96, 258, buf, C_YELLOW, C_BLACK, 2);
 }
 
 static void render_game_over(void)
@@ -523,6 +549,7 @@ static void render_win(void)
 void game_run(void)
 {
     score = 0;
+    coins = 0;
     lives = 3;
     level_idx = 0;
     state = S_TITLE;
@@ -547,11 +574,22 @@ void game_run(void)
             lcd_flush();
             break;
 
+        case S_LEVEL_CLEAR:
+            render_level_clear();
+            lcd_flush();
+            if (--clear_timer <= 0) {
+                level_idx++;
+                if (level_idx >= LEVEL_COUNT) state = S_WIN;
+                else start_level(level_idx);
+            }
+            break;
+
         case S_GAME_OVER:
             render_game_over();
             lcd_flush();
             if (press == DIR_CENTER) {
                 score = 0;
+                coins = 0;
                 lives = 3;
                 level_idx = 0;
                 start_level(0);
@@ -563,6 +601,7 @@ void game_run(void)
             lcd_flush();
             if (press == DIR_CENTER) {
                 score = 0;
+                coins = 0;
                 lives = 3;
                 level_idx = 0;
                 state = S_TITLE;
