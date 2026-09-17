@@ -67,8 +67,8 @@ scan.c    Joystick pin scanner (development tool).
 | `ACCEL` / `DECEL` | acceleration and friction | 1 / 1 |
 | `GRAVITY_RISE` / `GRAVITY_FALL` | gravity going up / down | 1 / 2 |
 | `MAX_FALL` | terminal velocity | 12 |
-| `JUMP_VEL` | initial jump speed | -11 |
-| `JUMP_CUT` | rising speed after releasing B1 (variable jump height) | -4 |
+| `JUMP_VEL` | initial jump speed (apex ~78 px: 4-tile shelves reachable) | -12 |
+| `JUMP_CUT` | rising speed after releasing B1 (variable jump height) | -5 |
 | `COYOTE_FRAMES` / `JUMP_BUFFER` | jump forgiveness, in frames | 4 / 6 |
 
 ### Adding a level

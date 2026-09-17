@@ -35,8 +35,8 @@
 #define GRAVITY_RISE  1    /* gravity while moving up              */
 #define GRAVITY_FALL  2    /* gravity while falling (snappier)     */
 #define MAX_FALL      12
-#define JUMP_VEL      -11
-#define JUMP_CUT      -4    /* rising speed after B1 is released   */
+#define JUMP_VEL      -12   /* apex ~78 px: 4-tile shelves are reachable */
+#define JUMP_CUT      -5    /* rising speed after B1 is released   */
 #define COYOTE_FRAMES 4     /* frames of grace after leaving a ledge */
 #define JUMP_BUFFER   6     /* frames to buffer a jump before landing */
 
@@ -102,12 +102,12 @@ static const char level3[LEVEL_ROWS][LEVEL_COLS + 1] = {
     ".............................................................F..",
     "................................................................",
     "................................................................",
-    "..................BB............................................",
-    "............CCB............C....................................",
-    "..................................CCC.............CCC...........",
-    "............BB..................................................",
+    "...........BB.................................................",
+    "..........CCB................................................",
+    "................................................................",
+    ".........BB..................................................",
     "................G.........CCC.....BBB.....CSC.....BBB...........",
-    "...........................................E...................",
+    "..................................CCC......E......CCC...........",
     "......BB..................BBB.............BBB...................",
     "........................................C..............C........",
     ".P.ETT..........E..........TT...................................",
@@ -126,11 +126,11 @@ static const char level4[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "................................................................",
     ".............CCC............................CCC.................",
     "........................CCC.....................................",
-    ".............BBB............................BBB.................",
+    "........BBB....................................................",
     "........CCC.............BBB.............CCC.....................",
-    "....................CCC.....CCC..........E..............E.......",
+    "....................CCC.....CCC......E..................E.......",
     "........BBB......G....E...............S.BBB.............BBB.....",
-    "....................BBB.....BBB.................................",
+    "........BBB.........BBB.....BBB.........BBB.............BBB.....",
     "................................................................",
     "................................................................",
     ".PE...TT.........................CC....CCC................TT....",
@@ -152,7 +152,7 @@ static const char level5[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "...........................................ES...................",
     "............BBB...CCC...............CCC...BBB...................",
     "......CCC.........G.....CCC.....................................",
-    "..................BBB...............BBB.........................",
+    ".........BBB..........................BBB.......................",
     "......BBB...............BMB....M...............M........BBB.....",
     "................................................................",
     "......................C.........................................",
@@ -931,15 +931,38 @@ static void draw_tile(int sx, int sy, int tx, uint8_t t)
     int ty = sy / TILE;
 
     switch (t) {
-    case T_GROUND:
+    case T_GROUND: {
+        int hash = tx * 7 + ty * 13;
         lcd_rect(sx, sy, sx + TILE - 1, sy + TILE - 1, C_BROWN);
-        lcd_rect(sx, sy, sx + TILE - 1, sy + 3, C_DARK_GREEN);   /* grass */
-        lcd_rect(sx, sy, sx + TILE - 1, sy, C_GREEN);            /* highlight */
-        lcd_rect(sx, sy + 4, sx + TILE - 1, sy + 4, C_DARK_GRAY);/* NES dark edge */
+        /* grass: green highlight, dark strip, NES dark edge line */
+        lcd_rect(sx, sy, sx + TILE - 1, sy, C_GREEN);
+        lcd_rect(sx, sy + 1, sx + TILE - 1, sy + 3, C_DARK_GREEN);
+        lcd_rect(sx, sy + 4, sx + TILE - 1, sy + 4, C_DARK_GRAY);
+        /* light topsoil line under the grass, dark soil at the bottom */
+        lcd_rect(sx, sy + 5, sx + TILE - 1, sy + 5, C_BRICK_HI);
+        lcd_rect(sx, sy + 13, sx + TILE - 1, sy + TILE - 1, C_CASTLE_DK);
         /* deterministic dirt speckles */
-        if (((tx * 7 + ty * 13) & 3) == 0) lcd_px(sx + 3, sy + 9, C_DARK_GRAY);
-        if (((tx * 5 + ty * 11) & 3) == 0) lcd_px(sx + 10, sy + 13, C_DARK_GRAY);
+        if ((hash & 3) == 0) lcd_px(sx + 3, sy + 9, C_DARK_GRAY);
+        if (((tx * 5 + ty * 11) & 3) == 0) lcd_px(sx + 10, sy + 11, C_DARK_GRAY);
+        if (((tx * 3 + ty * 17) & 3) == 0) lcd_px(sx + 6, sy + 8, C_CASTLE);
+        /* surface decorations only where the tile above is open air */
+        if (ty > 0 && !solid_tile(grid[ty - 1][tx])) {
+            if ((hash & 7) == 1) {
+                /* a little grass tuft poking above the ground */
+                lcd_px(sx + 3, sy - 1, C_GREEN);
+                lcd_px(sx + 4, sy - 2, C_GREEN);
+                lcd_px(sx + 4, sy - 1, C_GREEN);
+                lcd_px(sx + 5, sy - 1, C_GREEN);
+            } else if ((hash & 7) == 5) {
+                /* a tiny two-tone flower */
+                lcd_px(sx + 10, sy - 2, C_YELLOW);
+                lcd_px(sx + 11, sy - 2, C_WHITE);
+                lcd_px(sx + 10, sy - 1, C_GREEN);
+                lcd_px(sx + 11, sy - 1, C_GREEN);
+            }
+        }
         break;
+    }
 
     case T_BRICK:
         lcd_rect(sx, sy, sx + TILE - 1, sy + TILE - 1, C_ORANGE);
@@ -1201,8 +1224,9 @@ static void render_world(void)
                        SPR_TRANSPARENT);
     }
 
-    /* player */
-    draw_mario(player.x - cam, player.y, player.facing_right);
+    /* player: hidden once he steps through the castle door (phase 2) */
+    if (!(state == S_CASTLE && castle_phase == 2))
+        draw_mario(player.x - cam, player.y, player.facing_right);
 
     /* particles on top */
     render_particles();

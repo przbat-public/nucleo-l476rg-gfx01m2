@@ -128,7 +128,11 @@ void lcd_init(void)
     gpio_clear(PORT_A, PIN_RST); delay_ms(20);
     gpio_set(PORT_A, PIN_RST);   delay_ms(120);
 
-    cmd(0x36); v = 0x08; data(&v, 1);  /* MADCTL: BGR, no mirror */
+    cmd(0x36); v = 0x00; data(&v, 1);  /* MADCTL: RGB order, no mirror.
+                                           BGR bit CLEAR: with 0x08 the
+                                           panel swapped red and blue
+                                           (red cap -> blue, yellow coins
+                                           -> cyan, blue sky -> orange) */
     cmd(0x3A); v = 0x55; data(&v, 1);  /* COLMOD: 16 bpp        */
     cmd(0x11); delay_ms(120);          /* SLPOUT                */
     cmd(0x29); delay_ms(20);           /* DISPON                */
