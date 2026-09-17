@@ -4,16 +4,17 @@ A side-scrolling platformer written from scratch in C — no HAL, no vendor
 libraries, ~10 KB of firmware. Built on the layered architecture described
 below so that gameplay code stays readable and easy to change.
 
-## Controls (verified with the on-screen pin scanner)
+## Controls (verified with the two-page pin scanner)
 
 | Action | Input |
 |---|---|
-| Move left / right | joystick LEFT (PB4) / RIGHT (PC0) |
-| Jump (hold = higher jump) | joystick CENTER press (PC7) |
-| Start / retry / menu | CENTER press |
+| Move left / right | joystick LEFT (PB6) / RIGHT (PB0) |
+| Jump (hold = higher jump) | the blue USER button **B1** (PC13) |
+| Pause / resume | joystick DOWN (PB4) |
+| Start / retry / menu | B1 |
 
-Note: the joystick's UP direction is not routed on this shield build
-(PA0 reads permanently low) and the game does not use it.
+Note: PA0 is permanently pulled LOW on this shield and must never be
+mapped; the joystick UP contact (PC0) is unused by the game.
 
 ## Build & flash
 

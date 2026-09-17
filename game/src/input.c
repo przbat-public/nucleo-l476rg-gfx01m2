@@ -1,21 +1,18 @@
 /*
  * input.c — joystick + button input.
  *
- * THE PIN MAP (single source of truth).
+ * THE PIN MAP (single source of truth), verified with the two-page
+ * scanner (see scan.c):
  *
- * The joystick cap is mounted rotated 90 degrees clockwise on this
- * shield, so the map below is the scan result rotated accordingly:
+ *   DIR_LEFT   = PB6
+ *   DIR_RIGHT  = PB0
+ *   DIR_UP     = PC0    (unused by the game)
+ *   DIR_DOWN   = PB4    (pause)
+ *   DIR_CENTER = PC13   (the blue USER button B1 — jump / start)
  *
- *   DIR_LEFT   = PB0
- *   DIR_RIGHT  = PB13   (if RIGHT does not respond, the UP contact
- *                        may be PA0 — see the note below)
- *   DIR_DOWN   = PC0
- *   DIR_CENTER = PC7
- *   DIR_UP     = PB4    (unused by the game)
- *
- * NOTE: PA0 reads permanently LOW with the shield mounted (a shield
- * quirk), so it must NOT be used in the map — a stuck pin would make
- * input_read() report a phantom press every frame.
+ * NOTE: PA0 is permanently pulled LOW on this shield and must not
+ * appear in the map — a stuck pin would win the input_read() scan
+ * and block every other button.
  *
  * All switches are active-low (pressed = pin reads 0).
  * To change a pin, edit this table and nothing else.
@@ -29,11 +26,11 @@
 typedef struct { uint8_t port; uint8_t pin; } pin_t;
 
 static const pin_t joy_map[DIR_COUNT] = {
-    [DIR_UP]     = { PORT_B, 4  },
-    [DIR_DOWN]   = { PORT_C, 0  },
-    [DIR_LEFT]   = { PORT_B, 0  },
-    [DIR_RIGHT]  = { PORT_B, 13 },
-    [DIR_CENTER] = { PORT_C, 7  },
+    [DIR_UP]     = { PORT_C, 0  },
+    [DIR_DOWN]   = { PORT_B, 4  },
+    [DIR_LEFT]   = { PORT_B, 6  },
+    [DIR_RIGHT]  = { PORT_B, 0  },
+    [DIR_CENTER] = { PORT_C, 13 },
 };
 
 /*
