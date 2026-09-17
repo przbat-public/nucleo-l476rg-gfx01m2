@@ -26,7 +26,8 @@
 
 /* tile kinds */
 enum { T_AIR = '.', T_GROUND = '#', T_BRICK = 'B',
-       T_COIN = 'C', T_ENEMY = 'E', T_FLAG = 'F', T_PLAYER = 'P' };
+       T_COIN = 'C', T_ENEMY = 'E', T_FLAG = 'F', T_PLAYER = 'P',
+       T_QB = '?', T_QB_USED = 'U', T_PIPE = 'T' };
 
 static const char level1[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "................................................................",
@@ -42,12 +43,12 @@ static const char level1[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "................................................................",
     "................................................................",
     "....................CCCC................CCC.....................",
-    ".....................E..........................................",
+    ".....................E.............?...................?........",
     "..........CCC.......BBBB......CCC.......BBB.......CCC...........",
     "................................................................",
     "..........BBB.................BBB.................BBB...........",
-    "..P...............................C.C.C.........................",
-    "################################################################",
+    "..P....TT.........................C.C.C.........................",
+    "#######TT#######################################################",
     "################################################################",
 };
 
@@ -65,12 +66,12 @@ static const char level2[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "................................................................",
     "................................................................",
     "........................CCC......CCC............................",
-    "..................................E.............................",
+    "...........................?......E..?..........................",
     "........................BBB......BBB............................",
     "................................................................",
     ".................BB...C.......C.................C...............",
-    "..P...............................................E.............",
-    "###############....######################....###################",
+    "..P.......TT......................................E..TT.........",
+    "##########TT###....######################....########TT#########",
     "###############....######################....###################",
 };
 
@@ -88,12 +89,12 @@ static const char level3[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "............CCB............C....................................",
     "..................................CCC.............CCC...........",
     "............BB..................................................",
-    "..........................CCC.....BBB.....CCC.....BBB...........",
-    "...........................E...............E....................",
+    "................?.........CCC.....BBB.....C?C.....BBB...........",
+    ".................E............................E.................",
     "......BB..................BBB.............BBB...................",
     "........................................C..............C........",
-    ".P.E............................................................",
-    "###########...#######...########################################",
+    ".P.ETT.....................TT...................................",
+    "####TT#####...#######...###TT###################################",
     "###########...#######...########################################",
 };
 
@@ -111,12 +112,12 @@ static const char level4[LEVEL_ROWS][LEVEL_COLS + 1] = {
     ".............BBB............................BBB.................",
     "........CCC.............BBB.............CCC.....................",
     "....................CCC.....CCC..........E..............E.......",
-    "........BBB...........E.................BBB.............BBB.....",
+    "........BBB......?....E...............?.BBB.............BBB.....",
     "....................BBB.....BBB.................................",
     "................................................................",
     "................................................................",
-    ".PE..............................CC....CCC.................C....",
-    "############....###############....##############....###########",
+    ".PE...TT.........................CC....CCC................TT....",
+    "######TT####....###############....##############....#####TT####",
     "############....###############....##############....###########",
 };
 
@@ -227,7 +228,8 @@ static void draw_mario(int x, int y, bool facing_right);
 
 static bool solid_tile(uint8_t t)
 {
-    return t == T_GROUND || t == T_BRICK;
+    return t == T_GROUND || t == T_BRICK || t == T_PIPE ||
+           t == T_QB || t == T_QB_USED;
 }
 
 static bool solid_at(int tx, int ty)
@@ -351,6 +353,20 @@ static void update_player(void)
         if (box_hits(player.x + 1, ny, MARIO_W - 2, 1)) {
             player.y = (ny / TILE + 1) * TILE;           /* snap below */
             player.vy = 0;
+            /* bump a ? block from below -> coin + used block */
+            int hty = ny / TILE;
+            int hx0 = (player.x + 1) / TILE;
+            int hx1 = (player.x + MARIO_W - 2) / TILE;
+            for (int tx = hx0; tx <= hx1; tx++) {
+                if (tx < 0 || tx >= LEVEL_COLS || hty < 0 || hty >= LEVEL_ROWS)
+                    continue;
+                if (grid[hty][tx] == T_QB) {
+                    grid[hty][tx] = T_QB_USED;
+                    score += 10;
+                    coins++;
+                    spawn_burst(tx * TILE + 8 - cam_x, hty * TILE, C_GOLD, 6);
+                }
+            }
         } else {
             player.y = ny;
         }
@@ -469,6 +485,18 @@ static void fmt_int(char *buf, int v)
     *buf = '\0';
 }
 
+/* like fmt_int but zero-padded to `width` digits (classic score) */
+static void fmt_int_pad(char *buf, int v, int width)
+{
+    char tmp[8];
+    int i = 0;
+    if (v == 0) tmp[i++] = '0';
+    while (v > 0) { tmp[i++] = (char)('0' + v % 10); v /= 10; }
+    while (i < width) tmp[i++] = '0';
+    while (i > 0) *buf++ = tmp[--i];
+    *buf = '\0';
+}
+
 static void draw_tile(int sx, int sy, int tx, uint8_t t)
 {
     int ty = sy / TILE;
@@ -493,9 +521,43 @@ static void draw_tile(int sx, int sy, int tx, uint8_t t)
         break;
 
     case T_COIN: {
-        int f = (int)((frame >> 3) & 1);
+        int f = (int)((frame >> 2) & 3);   /* 4-frame rotation */
         lcd_sprite(coin_sprite[f][0], COIN_W, COIN_H,
                    sx + 4, sy + 4, SPR_TRANSPARENT);
+        break;
+    }
+
+    case T_QB:
+        /* classic yellow ? block */
+        lcd_rect(sx, sy, sx + TILE - 1, sy + TILE - 1, C_YELLOW);
+        lcd_rect(sx, sy, sx + TILE - 1, sy, C_BRICK_HI);
+        lcd_rect(sx, sy + TILE - 1, sx + TILE - 1, sy + TILE - 1, C_DARK_GRAY);
+        lcd_px(sx + 1, sy + 1, C_BROWN);   lcd_px(sx + 14, sy + 1, C_BROWN);
+        lcd_px(sx + 1, sy + 14, C_BROWN);  lcd_px(sx + 14, sy + 14, C_BROWN);
+        lcd_text(sx + 5, sy + 4, "?", C_BROWN, C_YELLOW, 1);
+        break;
+
+    case T_QB_USED:
+        /* used block: brown, no mark */
+        lcd_rect(sx, sy, sx + TILE - 1, sy + TILE - 1, C_BROWN);
+        lcd_rect(sx, sy, sx + TILE - 1, sy, C_BRICK_HI);
+        lcd_rect(sx, sy + TILE - 1, sx + TILE - 1, sy + TILE - 1, C_DARK_GRAY);
+        lcd_px(sx + 1, sy + 1, C_DARK_GRAY);  lcd_px(sx + 14, sy + 1, C_DARK_GRAY);
+        lcd_px(sx + 1, sy + 14, C_DARK_GRAY); lcd_px(sx + 14, sy + 14, C_DARK_GRAY);
+        break;
+
+    case T_PIPE: {
+        bool lip = (ty == 0) || (grid[ty - 1][tx] != T_PIPE);
+        if (lip) {
+            /* rim, overhanging both sides */
+            lcd_rect(sx - 2, sy + 2, sx + TILE + 1, sy + 6, C_PIPE);
+            lcd_rect(sx - 2, sy + 6, sx + TILE + 1, sy + 6, C_PIPE_DK);
+        } else {
+            /* stem with highlight and shadow stripes */
+            lcd_rect(sx + 3, sy, sx + TILE - 4, sy + TILE - 1, C_PIPE);
+            lcd_rect(sx + 3, sy, sx + 5, sy + TILE - 1, C_PIPE_DK);
+            lcd_rect(sx + 10, sy, sx + 11, sy + TILE - 1, C_GREEN);
+        }
         break;
     }
 
@@ -509,6 +571,25 @@ static void draw_tile(int sx, int sy, int tx, uint8_t t)
             int wf = (int)((frame >> 3) & 1);   /* waving flag */
             lcd_sprite(flag_sprite[wf][0], FLAG_W, FLAG_H,
                        sx + 4, sy + 2, SPR_TRANSPARENT);
+        }
+        /* brick castle to the right of the flag */
+        {
+            int gy = -1;
+            for (int tty = sy / TILE; tty < LEVEL_ROWS; tty++)
+                if (solid_tile(grid[tty][tx])) { gy = tty * TILE; break; }
+            if (gy > 0) {
+                int cx = sx + 12, cw = 44, ch = 40;
+                lcd_rect(cx, gy - ch, cx + cw - 1, gy - 1, C_CASTLE);
+                for (int yy = gy - ch; yy < gy; yy += 8)     /* brick rows */
+                    lcd_rect(cx, yy, cx + cw - 1, yy, C_CASTLE_DK);
+                for (int bx = cx; bx < cx + cw; bx += 11)    /* battlements */
+                    lcd_rect(bx, gy - ch - 6, bx + 6, gy - ch - 1, C_CASTLE);
+                lcd_rect(cx + cw / 2 - 6, gy - 18, cx + cw / 2 + 5, gy - 1,
+                         C_CASTLE_DK);                         /* door */
+                lcd_rect(cx + 6, gy - ch + 8, cx + 10, gy - ch + 12, C_CASTLE_DK);
+                lcd_rect(cx + cw - 11, gy - ch + 8, cx + cw - 7, gy - ch + 12,
+                         C_CASTLE_DK);                         /* windows */
+            }
         }
         break;
 
@@ -610,21 +691,17 @@ static void draw_hud(void)
     lcd_rect(0, 0, LCD_W - 1, 11, C_BLACK);
     char buf[16];
 
-    lcd_text(2, 2, "S", C_WHITE, C_BLACK, 1);
-    fmt_int(buf, score);
-    lcd_text(12, 2, buf, C_YELLOW, C_BLACK, 1);
-
-    lcd_text(66, 2, "C", C_WHITE, C_BLACK, 1);
-    fmt_int(buf, coins);
-    lcd_text(76, 2, buf, C_GOLD, C_BLACK, 1);
-
-    lcd_text(132, 2, "L", C_WHITE, C_BLACK, 1);
+    /* classic NES-style HUD: MARIO 000000 x3 ... LV */
+    lcd_text(2, 2, "MARIO", C_WHITE, C_BLACK, 1);
+    fmt_int_pad(buf, score, 6);
+    lcd_text(38, 2, buf, C_WHITE, C_BLACK, 1);
+    lcd_text(80, 2, "x", C_WHITE, C_BLACK, 1);
     fmt_int(buf, lives);
-    lcd_text(142, 2, buf, C_RED, C_BLACK, 1);
+    lcd_text(88, 2, buf, C_WHITE, C_BLACK, 1);
 
-    lcd_text(180, 2, "LV", C_WHITE, C_BLACK, 1);
+    lcd_text(190, 2, "LV", C_WHITE, C_BLACK, 1);
     fmt_int(buf, level_idx + 1);
-    lcd_text(198, 2, buf, C_GREEN, C_BLACK, 1);
+    lcd_text(208, 2, buf, C_WHITE, C_BLACK, 1);
 }
 
 /* ------------------------------ screens --------------------------- */

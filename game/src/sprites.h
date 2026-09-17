@@ -1,11 +1,11 @@
 /*
- * sprites.h — pixel art as palette-index arrays.
+ * sprites.h — pixel art as palette-index arrays, in the style of the
+ * classic NES Mario look (original art inspired by, not copied from,
+ * Nintendo's sprites).
  *
- * Sprites use lcd.h palette indices (C_RED, C_BLUE, ...).
- * Index SPR_TRANSPARENT (255) is skipped when drawing.
- *
- * Mario faces RIGHT in the arrays; the renderer mirrors him when
- * he walks left.
+ * Sprites use lcd.h palette indices. Index SPR_TRANSPARENT (255) is
+ * skipped when drawing. Mario faces RIGHT; the renderer mirrors him
+ * when he walks left.
  */
 #pragma once
 #include <stdint.h>
@@ -14,98 +14,103 @@
 
 /* palette shortcuts for readable art */
 #define P_  SPR_TRANSPARENT
-#define P_K 0   /* black   */
-#define P_R 2   /* red     */
-#define P_B 4   /* blue    */
-#define P_S 13  /* skin    */
-#define P_N 8   /* gray    */
-#define P_W 1   /* white   */
-#define P_BR 11 /* brown   */
-#define P_G 12  /* gold    */
-#define P_DG 15 /* dark green */
-#define P_O 14 /* orange  */
+#define P_K 0   /* black outline    */
+#define P_R 2   /* mario red        */
+#define P_B 4   /* overalls blue    */
+#define P_S 13  /* skin             */
+#define P_N 8   /* gray             */
+#define P_W 1   /* white            */
+#define P_BR 11 /* brown            */
+#define P_G 12  /* gold             */
+#define P_DG 15 /* dark green       */
+#define P_O 14 /* brick             */
+#define P_Y 5   /* yellow           */
+#define P_H 9   /* hair/shoes brown */
 
-/* Mario, 12 x 16, three walk frames + a jump pose */
+/* Mario, 12 x 16, three walk frames + a jump pose.
+ * Cap with a brim, mustache, blue overalls with yellow buttons,
+ * brown shoes. */
 #define MARIO_W 12
 #define MARIO_H 16
 #define MARIO_FRAMES 4    /* 0..2 = walk, 3 = jump */
 
 static const uint8_t mario_sprite[MARIO_FRAMES][MARIO_H][MARIO_W] = {
     { /* 0: standing */
-        { P_, P_, P_R, P_R, P_R, P_R, P_R, P_, P_, P_, P_, P_ },
-        { P_, P_R, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_, P_ },
-        { P_, P_K, P_K, P_S, P_K, P_S, P_K, P_K, P_, P_, P_, P_ },
-        { P_, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_, P_ },
-        { P_, P_S, P_S, P_K, P_S, P_S, P_K, P_S, P_S, P_, P_, P_ },
-        { P_, P_, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_, P_, P_ },
-        { P_, P_, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_, P_ },
-        { P_, P_R, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_, P_ },
-        { P_, P_B, P_B, P_B, P_B, P_B, P_B, P_B, P_, P_, P_, P_ },
-        { P_, P_B, P_, P_, P_B, P_, P_, P_B, P_, P_B, P_, P_ },
-        { P_, P_B, P_, P_, P_B, P_, P_, P_B, P_, P_B, P_, P_ },
-        { P_, P_S, P_, P_, P_S, P_, P_, P_S, P_, P_S, P_, P_ },
-        { P_, P_S, P_, P_, P_S, P_, P_, P_S, P_, P_S, P_, P_ },
-        { P_, P_K, P_, P_, P_K, P_, P_, P_K, P_, P_K, P_, P_ },
-        { P_S, P_S, P_, P_, P_, P_, P_, P_, P_, P_S, P_S, P_ },
-        { P_S, P_S, P_, P_, P_, P_, P_, P_, P_, P_S, P_S, P_ },
+        { P_, P_, P_, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_ },
+        { P_, P_, P_R, P_R, P_W, P_R, P_R, P_R, P_R, P_R, P_, P_ },
+        { P_, P_, P_H, P_H, P_H, P_H, P_S, P_S, P_S, P_S, P_, P_ },
+        { P_, P_, P_H, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_ },
+        { P_, P_, P_, P_S, P_K, P_S, P_S, P_K, P_S, P_, P_, P_ },
+        { P_, P_, P_, P_S, P_H, P_H, P_H, P_H, P_S, P_, P_, P_ },
+        { P_, P_, P_, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_ },
+        { P_, P_, P_R, P_R, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_ },
+        { P_, P_, P_B, P_B, P_B, P_B, P_B, P_B, P_B, P_, P_, P_ },
+        { P_, P_, P_, P_Y, P_Y, P_B, P_B, P_B, P_B, P_, P_, P_ },
+        { P_, P_, P_, P_B, P_B, P_, P_, P_B, P_B, P_, P_, P_ },
+        { P_, P_, P_, P_B, P_B, P_, P_, P_B, P_B, P_, P_, P_ },
+        { P_, P_, P_, P_K, P_K, P_, P_, P_K, P_K, P_, P_, P_ },
+        { P_, P_, P_K, P_K, P_K, P_, P_, P_K, P_K, P_K, P_, P_ },
+        { P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_ },
+        { P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_ },
     },
     { /* 1: walk — left leg forward */
-        { P_, P_, P_R, P_R, P_R, P_R, P_R, P_, P_, P_, P_, P_ },
-        { P_, P_R, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_, P_ },
-        { P_, P_K, P_K, P_S, P_K, P_S, P_K, P_K, P_, P_, P_, P_ },
-        { P_, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_, P_ },
-        { P_, P_S, P_S, P_K, P_S, P_S, P_K, P_S, P_S, P_, P_, P_ },
-        { P_, P_, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_, P_, P_ },
-        { P_, P_, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_, P_ },
-        { P_, P_R, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_, P_ },
-        { P_, P_B, P_B, P_B, P_B, P_B, P_B, P_B, P_, P_, P_, P_ },
-        { P_, P_B, P_, P_, P_B, P_, P_, P_B, P_, P_B, P_, P_ },
-        { P_, P_B, P_, P_, P_B, P_, P_, P_B, P_, P_B, P_, P_ },
-        { P_, P_S, P_, P_, P_S, P_, P_, P_S, P_, P_S, P_, P_ },
-        { P_, P_S, P_, P_, P_S, P_, P_S, P_S, P_, P_S, P_, P_ },
-        { P_, P_K, P_, P_, P_K, P_, P_K, P_K, P_, P_K, P_, P_ },
-        { P_S, P_S, P_S, P_S, P_, P_, P_, P_, P_, P_S, P_S, P_ },
-        { P_S, P_S, P_S, P_, P_, P_, P_, P_, P_, P_, P_S, P_ },
+        { P_, P_, P_, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_ },
+        { P_, P_, P_R, P_R, P_W, P_R, P_R, P_R, P_R, P_R, P_, P_ },
+        { P_, P_, P_H, P_H, P_H, P_H, P_S, P_S, P_S, P_S, P_, P_ },
+        { P_, P_, P_H, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_ },
+        { P_, P_, P_, P_S, P_K, P_S, P_S, P_K, P_S, P_, P_, P_ },
+        { P_, P_, P_, P_S, P_H, P_H, P_H, P_H, P_S, P_, P_, P_ },
+        { P_, P_, P_, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_ },
+        { P_, P_, P_R, P_R, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_ },
+        { P_, P_, P_B, P_B, P_B, P_B, P_B, P_B, P_B, P_, P_, P_ },
+        { P_, P_, P_, P_Y, P_Y, P_B, P_B, P_B, P_B, P_, P_, P_ },
+        { P_, P_, P_, P_B, P_B, P_, P_, P_B, P_B, P_, P_, P_ },
+        { P_, P_, P_, P_B, P_B, P_, P_, P_B, P_B, P_, P_, P_ },
+        { P_, P_, P_K, P_K, P_, P_, P_, P_K, P_K, P_, P_, P_ },
+        { P_, P_K, P_K, P_K, P_, P_, P_, P_, P_K, P_K, P_, P_ },
+        { P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_ },
+        { P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_ },
     },
     { /* 2: walk — legs together (passing) */
-        { P_, P_, P_R, P_R, P_R, P_R, P_R, P_, P_, P_, P_, P_ },
-        { P_, P_R, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_, P_ },
-        { P_, P_K, P_K, P_S, P_K, P_S, P_K, P_K, P_, P_, P_, P_ },
-        { P_, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_, P_ },
-        { P_, P_S, P_S, P_K, P_S, P_S, P_K, P_S, P_S, P_, P_, P_ },
-        { P_, P_, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_, P_, P_ },
-        { P_, P_, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_, P_ },
-        { P_, P_R, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_, P_ },
-        { P_, P_B, P_B, P_B, P_B, P_B, P_B, P_B, P_, P_, P_, P_ },
-        { P_, P_B, P_, P_, P_B, P_, P_, P_B, P_, P_B, P_, P_ },
-        { P_, P_B, P_, P_, P_B, P_, P_, P_B, P_, P_B, P_, P_ },
-        { P_, P_S, P_, P_, P_S, P_, P_, P_S, P_, P_S, P_, P_ },
-        { P_, P_S, P_, P_, P_S, P_, P_, P_S, P_, P_S, P_, P_ },
-        { P_, P_K, P_, P_, P_K, P_, P_, P_K, P_, P_K, P_, P_ },
-        { P_, P_, P_S, P_S, P_S, P_, P_, P_S, P_S, P_S, P_, P_ },
-        { P_, P_, P_S, P_S, P_S, P_, P_, P_S, P_S, P_S, P_, P_ },
+        { P_, P_, P_, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_ },
+        { P_, P_, P_R, P_R, P_W, P_R, P_R, P_R, P_R, P_R, P_, P_ },
+        { P_, P_, P_H, P_H, P_H, P_H, P_S, P_S, P_S, P_S, P_, P_ },
+        { P_, P_, P_H, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_ },
+        { P_, P_, P_, P_S, P_K, P_S, P_S, P_K, P_S, P_, P_, P_ },
+        { P_, P_, P_, P_S, P_H, P_H, P_H, P_H, P_S, P_, P_, P_ },
+        { P_, P_, P_, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_ },
+        { P_, P_, P_R, P_R, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_ },
+        { P_, P_, P_B, P_B, P_B, P_B, P_B, P_B, P_B, P_, P_, P_ },
+        { P_, P_, P_, P_Y, P_Y, P_B, P_B, P_B, P_B, P_, P_, P_ },
+        { P_, P_, P_, P_B, P_B, P_, P_, P_B, P_B, P_, P_, P_ },
+        { P_, P_, P_, P_B, P_B, P_, P_, P_B, P_B, P_, P_, P_ },
+        { P_, P_, P_, P_, P_K, P_K, P_, P_, P_, P_, P_, P_ },
+        { P_, P_, P_, P_K, P_K, P_K, P_, P_, P_, P_, P_, P_ },
+        { P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_ },
+        { P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_ },
     },
     { /* 3: jump — arms out, legs tucked */
-        { P_, P_, P_R, P_R, P_R, P_R, P_R, P_, P_, P_, P_, P_ },
-        { P_, P_R, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_, P_ },
-        { P_, P_K, P_K, P_S, P_K, P_S, P_K, P_K, P_, P_, P_, P_ },
-        { P_, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_, P_ },
-        { P_, P_S, P_S, P_K, P_S, P_S, P_K, P_S, P_S, P_, P_, P_ },
-        { P_, P_, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_, P_, P_ },
-        { P_, P_R, P_R, P_, P_R, P_R, P_R, P_, P_R, P_R, P_, P_ },
-        { P_, P_R, P_R, P_, P_R, P_R, P_R, P_, P_R, P_R, P_, P_ },
+        { P_, P_, P_, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_ },
+        { P_, P_, P_R, P_R, P_W, P_R, P_R, P_R, P_R, P_R, P_, P_ },
+        { P_, P_, P_H, P_H, P_H, P_H, P_S, P_S, P_S, P_S, P_, P_ },
+        { P_, P_, P_H, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_ },
+        { P_, P_, P_, P_S, P_K, P_S, P_S, P_K, P_S, P_, P_, P_ },
+        { P_, P_, P_, P_S, P_H, P_H, P_H, P_H, P_S, P_, P_, P_ },
+        { P_, P_, P_, P_R, P_R, P_R, P_R, P_R, P_R, P_, P_, P_ },
+        { P_, P_R, P_R, P_, P_R, P_R, P_R, P_R, P_, P_R, P_R, P_ },
         { P_, P_B, P_B, P_B, P_B, P_B, P_B, P_B, P_, P_, P_, P_ },
-        { P_, P_B, P_, P_, P_B, P_, P_, P_B, P_, P_B, P_, P_ },
-        { P_, P_S, P_, P_, P_S, P_, P_, P_S, P_, P_S, P_, P_ },
-        { P_, P_S, P_, P_S, P_S, P_, P_, P_S, P_, P_S, P_, P_ },
-        { P_, P_S, P_, P_S, P_S, P_, P_K, P_K, P_, P_, P_, P_ },
-        { P_, P_K, P_, P_, P_, P_, P_K, P_K, P_, P_, P_, P_ },
-        { P_, P_K, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_ },
+        { P_, P_, P_, P_Y, P_Y, P_B, P_B, P_B, P_B, P_, P_, P_ },
+        { P_, P_, P_, P_B, P_B, P_B, P_B, P_, P_, P_, P_, P_ },
+        { P_, P_, P_, P_B, P_B, P_B, P_B, P_, P_, P_, P_, P_ },
+        { P_, P_, P_K, P_K, P_K, P_K, P_, P_, P_, P_, P_, P_ },
+        { P_, P_, P_K, P_K, P_, P_, P_, P_, P_, P_, P_, P_ },
+        { P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_ },
         { P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_ },
     },
 };
 
-/* Goomba-like walker, 12 x 12 (two walk frames) */
+/* Goomba-like walker, 12 x 12 (two walk frames).
+ * Brown dome, angry white eyes, dark feet. */
 #define ENEMY_W 12
 #define ENEMY_H 12
 static const uint8_t enemy_sprite[2][ENEMY_H][ENEMY_W] = {
@@ -113,37 +118,37 @@ static const uint8_t enemy_sprite[2][ENEMY_H][ENEMY_W] = {
         { P_, P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_, P_ },
         { P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_ },
         { P_BR, P_K, P_K, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_K, P_K, P_BR },
-        { P_BR, P_K, P_K, P_S, P_S, P_S, P_S, P_S, P_S, P_K, P_K, P_BR },
-        { P_BR, P_BR, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_BR, P_BR },
-        { P_, P_BR, P_BR, P_S, P_S, P_S, P_S, P_S, P_S, P_BR, P_BR, P_ },
+        { P_BR, P_W, P_W, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_W, P_W, P_BR },
+        { P_BR, P_W, P_K, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_K, P_W, P_BR },
+        { P_BR, P_W, P_W, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_W, P_W, P_BR },
         { P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_ },
-        { P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR },
-        { P_BR, P_BR, P_BR, P_, P_BR, P_BR, P_BR, P_BR, P_, P_BR, P_BR, P_BR },
-        { P_BR, P_BR, P_, P_, P_, P_BR, P_BR, P_, P_, P_, P_BR, P_BR },
-        { P_BR, P_BR, P_, P_, P_, P_, P_, P_, P_, P_, P_BR, P_BR },
-        { P_K, P_K, P_, P_, P_, P_, P_, P_, P_, P_, P_K, P_K },
+        { P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_ },
+        { P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_ },
+        { P_K, P_K, P_K, P_, P_, P_, P_, P_, P_, P_K, P_K, P_K },
+        { P_K, P_K, P_K, P_K, P_, P_, P_, P_, P_K, P_K, P_K, P_K },
+        { P_K, P_K, P_K, P_K, P_, P_, P_, P_, P_K, P_K, P_K, P_K },
     },
     { /* frame 1 (feet swapped) */
         { P_, P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_, P_ },
         { P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_ },
         { P_BR, P_K, P_K, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_K, P_K, P_BR },
-        { P_BR, P_K, P_K, P_S, P_S, P_S, P_S, P_S, P_S, P_K, P_K, P_BR },
-        { P_BR, P_BR, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_BR, P_BR },
-        { P_, P_BR, P_BR, P_S, P_S, P_S, P_S, P_S, P_S, P_BR, P_BR, P_ },
+        { P_BR, P_W, P_W, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_W, P_W, P_BR },
+        { P_BR, P_W, P_K, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_K, P_W, P_BR },
+        { P_BR, P_W, P_W, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_W, P_W, P_BR },
         { P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_ },
-        { P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR },
-        { P_BR, P_BR, P_BR, P_, P_BR, P_BR, P_BR, P_BR, P_, P_BR, P_BR, P_BR },
-        { P_BR, P_BR, P_, P_, P_BR, P_BR, P_, P_, P_, P_BR, P_BR, P_ },
-        { P_BR, P_BR, P_, P_, P_BR, P_BR, P_, P_, P_, P_BR, P_BR, P_ },
-        { P_K, P_K, P_, P_, P_K, P_K, P_, P_, P_, P_K, P_K, P_ },
+        { P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_ },
+        { P_, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_BR, P_ },
+        { P_K, P_K, P_K, P_K, P_, P_, P_, P_, P_K, P_K, P_K, P_K },
+        { P_K, P_K, P_K, P_, P_, P_, P_, P_, P_, P_K, P_K, P_K },
+        { P_K, P_K, P_K, P_, P_, P_, P_, P_, P_, P_K, P_K, P_K },
     },
 };
 
-/* Coin, 8 x 8 (two frames: coin0 = wide, coin1 = narrow) */
+/* Coin, 8 x 8, four rotation frames */
 #define COIN_W 8
 #define COIN_H 8
-static const uint8_t coin_sprite[2][COIN_H][COIN_W] = {
-    { /* frame 0 */
+static const uint8_t coin_sprite[4][COIN_H][COIN_W] = {
+    { /* full face */
         { P_, P_, P_G, P_G, P_G, P_G, P_, P_ },
         { P_, P_G, P_W, P_G, P_G, P_W, P_G, P_ },
         { P_G, P_W, P_, P_, P_, P_, P_W, P_G },
@@ -153,14 +158,34 @@ static const uint8_t coin_sprite[2][COIN_H][COIN_W] = {
         { P_, P_G, P_W, P_G, P_G, P_W, P_G, P_ },
         { P_, P_, P_G, P_G, P_G, P_G, P_, P_ },
     },
-    { /* frame 1 (narrower) */
+    { /* three-quarter */
+        { P_, P_, P_, P_G, P_G, P_, P_, P_ },
+        { P_, P_, P_G, P_W, P_W, P_G, P_, P_ },
+        { P_, P_G, P_W, P_, P_, P_W, P_G, P_ },
+        { P_, P_G, P_W, P_, P_, P_W, P_G, P_ },
+        { P_, P_G, P_W, P_, P_, P_W, P_G, P_ },
+        { P_, P_, P_G, P_W, P_W, P_G, P_, P_ },
+        { P_, P_, P_, P_G, P_G, P_, P_, P_ },
+        { P_, P_, P_, P_, P_, P_, P_, P_ },
+    },
+    { /* edge */
         { P_, P_, P_, P_, P_, P_, P_, P_ },
         { P_, P_, P_, P_G, P_G, P_, P_, P_ },
-        { P_, P_, P_G, P_W, P_W, P_G, P_, P_ },
-        { P_, P_, P_G, P_W, P_W, P_G, P_, P_ },
-        { P_, P_, P_G, P_W, P_W, P_G, P_, P_ },
-        { P_, P_, P_G, P_W, P_W, P_G, P_, P_ },
         { P_, P_, P_, P_G, P_G, P_, P_, P_ },
+        { P_, P_, P_, P_W, P_W, P_, P_, P_ },
+        { P_, P_, P_, P_W, P_W, P_, P_, P_ },
+        { P_, P_, P_, P_G, P_G, P_, P_, P_ },
+        { P_, P_, P_, P_G, P_G, P_, P_, P_ },
+        { P_, P_, P_, P_, P_, P_, P_, P_ },
+    },
+    { /* three-quarter (other side) */
+        { P_, P_, P_G, P_G, P_, P_, P_, P_ },
+        { P_, P_G, P_W, P_W, P_G, P_, P_, P_ },
+        { P_G, P_W, P_, P_, P_W, P_G, P_, P_ },
+        { P_G, P_W, P_, P_, P_W, P_G, P_, P_ },
+        { P_G, P_W, P_, P_, P_W, P_G, P_, P_ },
+        { P_, P_G, P_W, P_W, P_G, P_, P_, P_ },
+        { P_, P_, P_G, P_G, P_, P_, P_, P_ },
         { P_, P_, P_, P_, P_, P_, P_, P_ },
     },
 };

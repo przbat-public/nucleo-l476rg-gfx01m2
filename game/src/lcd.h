@@ -8,6 +8,9 @@
  * This is the key architectural difference from the effects demo:
  * drawing is instant (RAM), the SPI transfer is one isolated step,
  * and the game never thinks about pixels on a wire.
+ *
+ * The palette is the classic Super Mario NES look (inspired, not a
+ * 1:1 copy of Nintendo's art).
  */
 #pragma once
 #include <stdint.h>
@@ -15,30 +18,35 @@
 #define LCD_W 240
 #define LCD_H 320
 
-/* palette indices — the first 16 entries are fixed ANSI-ish colors */
+/* palette indices — fixed colors 0..20 */
 #define C_BLACK        0
 #define C_WHITE        1
-#define C_RED          2
-#define C_GREEN        3
-#define C_BLUE         4
-#define C_YELLOW       5
-#define C_CYAN         6
-#define C_MAGENTA      7
+#define C_RED          2    /* mario red        */
+#define C_GREEN        3    /* NES green        */
+#define C_BLUE         4    /* overalls blue    */
+#define C_YELLOW       5    /* buttons, ? block */
+#define C_CYAN         6    /* cloud light      */
+#define C_MAGENTA      7    /* cloud shade      */
 #define C_GRAY         8
-#define C_DARK_GRAY    9
-#define C_SKY         10   /* light blue - sky */
-#define C_BROWN       11   /* platforms / ground */
-#define C_GOLD        12   /* coins */
-#define C_SKIN        13   /* mario */
-#define C_ORANGE      14
-#define C_DARK_GREEN  15
+#define C_DARK_GRAY    9    /* hair / shoes brown */
+#define C_SKY         10    /* NES sky blue     */
+#define C_BROWN       11    /* sienna (ground)  */
+#define C_GOLD        12    /* coins            */
+#define C_SKIN        13
+#define C_ORANGE      14    /* brick base       */
+#define C_DARK_GREEN  15    /* grass dark       */
+#define C_BRICK_HI    16    /* brick highlight  */
+#define C_PIPE        17    /* pipe green       */
+#define C_PIPE_DK     18    /* pipe shadow      */
+#define C_CASTLE      19    /* castle bricks    */
+#define C_CASTLE_DK   20    /* castle shadow    */
 
-/* environment palette: 16..27 sky ramp (deep -> pale),
-   28 = far mountains, 29 = near mountains, 30..255 = gray ramp */
-#define C_SKY_TOP     16
-#define C_SKY_HORIZON 27
-#define C_MOUNT_FAR   28
-#define C_MOUNT_NEAR  29
+/* environment palette: 21..32 sky ramp (deep -> pale),
+   33 = far mountains, 34 = near mountains, 35..255 = gray ramp */
+#define C_SKY_TOP     21
+#define C_SKY_HORIZON 32
+#define C_MOUNT_FAR   33
+#define C_MOUNT_NEAR  34
 
 void lcd_init(void);
 void lcd_clear(uint8_t color);

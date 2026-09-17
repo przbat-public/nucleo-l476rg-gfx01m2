@@ -69,34 +69,39 @@ static void palette_init(void)
 {
     pal_rgb[C_BLACK]      = rgb565(0, 0, 0);
     pal_rgb[C_WHITE]      = rgb565(255, 255, 255);
-    pal_rgb[C_RED]        = rgb565(220, 40, 40);
-    pal_rgb[C_GREEN]      = rgb565(40, 200, 60);
-    pal_rgb[C_BLUE]       = rgb565(40, 80, 240);
-    pal_rgb[C_YELLOW]     = rgb565(250, 220, 40);
-    pal_rgb[C_CYAN]       = rgb565(60, 220, 220);
-    pal_rgb[C_MAGENTA]    = rgb565(230, 60, 200);
-    pal_rgb[C_GRAY]       = rgb565(150, 150, 150);
-    pal_rgb[C_DARK_GRAY]  = rgb565(80, 80, 80);
-    pal_rgb[C_SKY]        = rgb565(120, 190, 255);
-    pal_rgb[C_BROWN]      = rgb565(160, 100, 40);
-    pal_rgb[C_GOLD]       = rgb565(255, 200, 60);
-    pal_rgb[C_SKIN]       = rgb565(255, 190, 150);
-    pal_rgb[C_ORANGE]     = rgb565(255, 120, 40);
-    pal_rgb[C_DARK_GREEN] = rgb565(20, 120, 40);
+    pal_rgb[C_RED]        = rgb565(224, 64, 40);    /* mario red        */
+    pal_rgb[C_GREEN]      = rgb565(22, 145, 7);     /* NES green        */
+    pal_rgb[C_BLUE]       = rgb565(16, 72, 168);    /* overalls blue    */
+    pal_rgb[C_YELLOW]     = rgb565(248, 184, 0);    /* buttons/? block  */
+    pal_rgb[C_CYAN]       = rgb565(132, 180, 252);  /* cloud light      */
+    pal_rgb[C_MAGENTA]    = rgb565(188, 196, 216);  /* cloud shade      */
+    pal_rgb[C_GRAY]       = rgb565(176, 176, 176);
+    pal_rgb[C_DARK_GRAY]  = rgb565(88, 56, 24);     /* hair/shoes brown */
+    pal_rgb[C_SKY]        = rgb565(92, 148, 252);   /* NES sky blue     */
+    pal_rgb[C_BROWN]      = rgb565(140, 85, 73);    /* sienna ground    */
+    pal_rgb[C_GOLD]       = rgb565(255, 216, 0);    /* coins            */
+    pal_rgb[C_SKIN]       = rgb565(240, 176, 136);  /* mario skin       */
+    pal_rgb[C_ORANGE]     = rgb565(176, 120, 80);   /* brick base       */
+    pal_rgb[C_DARK_GREEN] = rgb565(14, 94, 4);      /* grass dark       */
+    pal_rgb[C_BRICK_HI]   = rgb565(208, 152, 112);  /* brick highlight  */
+    pal_rgb[C_PIPE]       = rgb565(24, 160, 8);     /* pipe green       */
+    pal_rgb[C_PIPE_DK]    = rgb565(12, 96, 4);      /* pipe shadow      */
+    pal_rgb[C_CASTLE]     = rgb565(192, 128, 80);   /* castle bricks    */
+    pal_rgb[C_CASTLE_DK]  = rgb565(138, 90, 56);    /* castle shadow    */
 
     /* 12-step sky ramp: deep blue at the top, pale at the horizon */
     for (int i = 0; i < 12; i++) {
-        uint8_t r = (uint8_t)(70  + i * 15);   /* 70 .. 235  */
-        uint8_t g = (uint8_t)(130 + i * 8);    /* 130 .. 218 */
-        uint8_t b = (uint8_t)(255 - i * 2);    /* 255 .. 233 */
+        uint8_t r = (uint8_t)(60 + i * 14);    /* 60 .. 214   */
+        uint8_t g = (uint8_t)(110 + i * 11);   /* 110 .. 231  */
+        uint8_t b = (uint8_t)(255 - i * 2);    /* 255 .. 233  */
         pal_rgb[C_SKY_TOP + i] = rgb565(r, g, b);
     }
-    pal_rgb[C_MOUNT_FAR]  = rgb565(140, 170, 210);
-    pal_rgb[C_MOUNT_NEAR] = rgb565(95, 135, 175);
+    pal_rgb[C_MOUNT_FAR]  = rgb565(98, 127, 162);   /* steel blue   */
+    pal_rgb[C_MOUNT_NEAR] = rgb565(78, 106, 140);   /* darker       */
 
-    /* 30..255: grayscale ramp */
-    for (int i = 30; i < 256; i++) {
-        uint8_t v = (uint8_t)((i - 30) * 255u / 225u);
+    /* 35..255: grayscale ramp */
+    for (int i = 35; i < 256; i++) {
+        uint8_t v = (uint8_t)((i - 35) * 255u / 220u);
         pal_rgb[i] = rgb565(v, v, v);
     }
 }
