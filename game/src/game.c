@@ -255,7 +255,7 @@ static const int8_t MOV_SIN[64] = {
 /* ------------------------------ game state ------------------------ */
 
 typedef enum { S_TITLE, S_PLAYING, S_LEVEL_CLEAR, S_GAME_OVER, S_WIN,
-               S_PAUSED, S_DEAD, S_INTRO } state_t;
+               S_PAUSED, S_DEAD, S_INTRO, S_CASTLE } state_t;
 
 static state_t state;
 static int     level_idx;
@@ -276,6 +276,11 @@ static bool box_hits(int x, int y, int w, int h);
 static bool overlap(int ax, int ay, int aw, int ah,
                     int bx, int by, int bw, int bh);
 static void player_die(void);
+/* castle ending: after the flag, Mario auto-walks into the castle */
+static int  flag_tx;
+static bool auto_right;
+static bool entering_castle;
+
 static void start_level(int n);
 static void draw_mario(int x, int y, bool facing_right);
 static void flip_enemies_on(int tx, int hty);
@@ -366,6 +371,8 @@ static void start_level(int n)
     player.on_ground = false;
     player.facing_right = true;
     cam_x = 0;
+    auto_right = false;
+    entering_castle = false;
     intro_timer = 40;              /* "WORLD N" card, then play */
     state = S_INTRO;
 }
@@ -405,8 +412,8 @@ static bool prev_center;   /* edge detection for the B1 button           */
 
 static void update_player(void)
 {
-    bool left  = input_held(DIR_LEFT);
-    bool right = input_held(DIR_RIGHT);
+    bool left  = input_held(DIR_LEFT) && !auto_right;
+    bool right = input_held(DIR_RIGHT) || auto_right;
     bool center = input_held(DIR_CENTER);
 
     /* --- horizontal: accelerate / decelerate / skid --- */
@@ -586,14 +593,15 @@ static void update_player(void)
             }
         }
 
-    /* --- reached the goal flag? --- */
+    /* --- reached the goal flag? -> auto-walk into the castle --- */
     int ptx = (player.x + MARIO_W / 2) / TILE;
     for (int ty = 0; ty < LEVEL_ROWS; ty++) {
         if (grid[ty][ptx] == T_FLAG) {
             score += 100;
-            flash_timer = 4;           /* white flash */
-            clear_timer = 40;          /* LEVEL CLEAR screen */
-            state = S_LEVEL_CLEAR;
+            flag_tx = ptx;
+            auto_right = true;
+            entering_castle = false;
+            state = S_CASTLE;
             return;
         }
     }
@@ -849,6 +857,15 @@ static void draw_mountains(uint8_t color, int scroll, int amp, int base)
     }
 }
 
+/* Puffy pixel cloud with a shaded base. s = size (1 or 2). */
+static void draw_cloud(int x, int y, uint8_t c, uint8_t shade, int s)
+{
+    lcd_rect(x + 3 * s, y,          x + 8 * s,  y + 2 * s, c);
+    lcd_rect(x + 1 * s, y + 2 * s,  x + 10 * s, y + 4 * s, c);
+    lcd_rect(x,         y + 3 * s,  x + 11 * s, y + 6 * s, c);
+    lcd_rect(x + 2 * s, y + 6 * s,  x + 9 * s,  y + 7 * s, shade);
+}
+
 static void render_world(void)
 {
     int cam = cam_x + shake_x;   /* shake_x: +-2 px during the death screen */
@@ -886,11 +903,14 @@ static void render_world(void)
         lcd_rect(bx + 8, 179, bx + 13, 182, night ? C_NIGHT_HILL_FAR : C_MOUNT_FAR);
     }
 
+    /* puffy clouds (day: white with a shaded base, night: gray) */
+    uint8_t cc = night ? C_GRAY : C_WHITE;
+    uint8_t cs = night ? C_DARK_GRAY : C_MAGENTA;
     int p1 = (cam / 6) % 280 - 20;
     int p2 = (cam / 4) % 280 - 20;
-    lcd_rect(p1, 22, p1 + 30, 32, night ? C_GRAY : C_WHITE);
-    lcd_rect(p2 + 90, 48, p2 + 126, 60, night ? C_GRAY : C_WHITE);
-    lcd_rect(p1 + 160, 70, p1 + 186, 78, night ? C_GRAY : C_WHITE);
+    draw_cloud(p1, 22, cc, cs, 1);
+    draw_cloud(p2 + 90, 48, cc, cs, 2);
+    draw_cloud(p1 + 160, 70, cc, cs, 1);
 
     int cam_tile = cam / TILE;
     int off = cam % TILE;
@@ -1173,6 +1193,31 @@ void game_run(void)
                     start_level(level_idx);
                 }
             }
+            break;
+
+        case S_CASTLE:
+            /* Mario auto-walks into the castle to finish the level */
+            update_movers();
+            if (!entering_castle) {
+                update_player();
+                if (player.x + MARIO_W / 2 >= flag_tx * TILE + 34) {
+                    entering_castle = true;   /* at the door: slide in */
+                    player.vx = 0;
+                }
+            } else {
+                player.y += 4;                /* slide down, off screen */
+                if (player.y > LCD_H + 16) {
+                    flash_timer = 4;
+                    clear_timer = 40;
+                    auto_right = false;
+                    state = S_LEVEL_CLEAR;
+                }
+            }
+            update_enemies();
+            update_camera();
+            render_world();
+            draw_hud();
+            lcd_flush();
             break;
 
         case S_LEVEL_CLEAR:
