@@ -90,10 +90,10 @@ static const char level3[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "..................................CCC.............CCC...........",
     "............BB..................................................",
     "................?.........CCC.....BBB.....C?C.....BBB...........",
-    ".................E............................E.................",
+    "...........................................E...................",
     "......BB..................BBB.............BBB...................",
     "........................................C..............C........",
-    ".P.ETT.....................TT...................................",
+    ".P.ETT..........E..........TT...................................",
     "####TT#####...#######...###TT###################################",
     "###########...#######...########################################",
 };
@@ -506,6 +506,7 @@ static void draw_tile(int sx, int sy, int tx, uint8_t t)
         lcd_rect(sx, sy, sx + TILE - 1, sy + TILE - 1, C_BROWN);
         lcd_rect(sx, sy, sx + TILE - 1, sy + 3, C_DARK_GREEN);   /* grass */
         lcd_rect(sx, sy, sx + TILE - 1, sy, C_GREEN);            /* highlight */
+        lcd_rect(sx, sy + 4, sx + TILE - 1, sy + 4, C_DARK_GRAY);/* NES dark edge */
         /* deterministic dirt speckles */
         if (((tx * 7 + ty * 13) & 3) == 0) lcd_px(sx + 3, sy + 9, C_DARK_GRAY);
         if (((tx * 5 + ty * 11) & 3) == 0) lcd_px(sx + 10, sy + 13, C_DARK_GRAY);
@@ -513,11 +514,13 @@ static void draw_tile(int sx, int sy, int tx, uint8_t t)
 
     case T_BRICK:
         lcd_rect(sx, sy, sx + TILE - 1, sy + TILE - 1, C_ORANGE);
-        lcd_rect(sx, sy, sx + TILE - 1, sy, C_GOLD);             /* top light */
-        lcd_rect(sx, sy + TILE - 1, sx + TILE - 1, sy + TILE - 1, C_DARK_GRAY);
-        lcd_rect(sx, sy + 5, sx + TILE - 1, sy + 5, C_DARK_GRAY);  /* mortar */
-        lcd_rect(sx + 5, sy, sx + 5, sy + 4, C_DARK_GRAY);
-        lcd_rect(sx + 11, sy + 6, sx + 11, sy + TILE - 2, C_DARK_GRAY);
+        lcd_rect(sx, sy, sx + TILE - 1, sy, C_BRICK_HI);         /* top light */
+        lcd_rect(sx, sy + TILE - 1, sx + TILE - 1, sy + TILE - 1, C_BLACK);
+        lcd_rect(sx, sy + 5, sx + TILE - 1, sy + 5, C_BLACK);    /* NES mortar */
+        lcd_rect(sx, sy + 10, sx + TILE - 1, sy + 10, C_BLACK);
+        lcd_rect(sx + 5, sy, sx + 5, sy + 4, C_BLACK);
+        lcd_rect(sx + 11, sy + 6, sx + 11, sy + 9, C_BLACK);
+        lcd_rect(sx + 2, sy + 11, sx + 2, sy + 14, C_BLACK);
         break;
 
     case T_COIN: {
@@ -647,9 +650,17 @@ static void render_world(void)
     for (int y = 200; y < LCD_H; y++)
         lcd_rect(0, y, LCD_W - 1, y, C_SKY_HORIZON);
 
-    /* two parallax mountain layers + drifting clouds */
+    /* two parallax layers of NES-style green hills + drifting clouds */
     draw_mountains(C_MOUNT_FAR,  cam / 6, 45, 150);
     draw_mountains(C_MOUNT_NEAR, cam / 3, 30, 175);
+
+    /* bushes along the horizon */
+    for (int i = 0; i < 4; i++) {
+        int bx = ((i * 80 - cam / 2) % 320 + 320) % 320 - 30;
+        lcd_rect(bx, 186, bx + 24, 198, C_MOUNT_NEAR);
+        lcd_rect(bx + 4, 182, bx + 16, 186, C_MOUNT_NEAR);
+        lcd_rect(bx + 8, 179, bx + 13, 182, C_MOUNT_FAR);
+    }
 
     int p1 = (cam / 6) % 280 - 20;
     int p2 = (cam / 4) % 280 - 20;

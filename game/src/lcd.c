@@ -96,8 +96,9 @@ static void palette_init(void)
         uint8_t b = (uint8_t)(255 - i * 2);    /* 255 .. 233  */
         pal_rgb[C_SKY_TOP + i] = rgb565(r, g, b);
     }
-    pal_rgb[C_MOUNT_FAR]  = rgb565(98, 127, 162);   /* steel blue   */
-    pal_rgb[C_MOUNT_NEAR] = rgb565(78, 106, 140);   /* darker       */
+    /* classic NES background: rolling GREEN hills, not blue mountains */
+    pal_rgb[C_MOUNT_FAR]  = rgb565(108, 180, 60);   /* light hill green */
+    pal_rgb[C_MOUNT_NEAR] = rgb565(52, 132, 16);    /* grass green      */
 
     /* 35..255: grayscale ramp */
     for (int i = 35; i < 256; i++) {
