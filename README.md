@@ -146,6 +146,24 @@ The whole demo is **~2.5 KB of code**. Highlights:
 
 ---
 
+## Mini-Mario — a playable game
+
+Beyond the effects demo, this repository contains a complete little
+platformer in [`game/`](game): tile-map levels, gravity and jumping,
+enemy walkers (stomp them!), coins, a goal flag, three levels and a
+full state machine (title → game → level clear → win / game over).
+
+It demonstrates the *other* way to write embedded code: a layered
+architecture where game logic never touches a hardware register
+(see [game/README.md](game/README.md) for the architecture map and
+tuning knobs).
+
+```bash
+cd game
+make flash          # play: joystick LEFT/RIGHT moves, CENTER jumps
+make scanflash      # diagnostic: find the joystick pins for any board
+```
+
 ## Pinout
 
 The shield routes the display through the Arduino/morpho connectors. On the
