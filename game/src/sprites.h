@@ -389,3 +389,45 @@ static const uint8_t star_sprite[12][12] = {
     { P_, P_Y, P_Y, P_, P_, P_, P_, P_, P_, P_Y, P_Y, P_ },
     { P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_ },
 };
+
+/* Fireball, 8 x 8, two swirling frames. */
+#define FIRE_W 8
+#define FIRE_H 8
+static const uint8_t fire_sprite[2][FIRE_H][FIRE_W] = {
+    { /* frame 0 */
+        { P_, P_, P_O, P_O, P_, P_, P_, P_ },
+        { P_, P_O, P_Y, P_Y, P_O, P_, P_, P_ },
+        { P_, P_O, P_Y, P_Y, P_Y, P_O, P_, P_ },
+        { P_, P_O, P_Y, P_Y, P_Y, P_Y, P_, P_ },
+        { P_, P_, P_O, P_Y, P_Y, P_Y, P_O, P_ },
+        { P_, P_, P_, P_O, P_Y, P_O, P_, P_ },
+        { P_, P_, P_, P_, P_O, P_O, P_, P_ },
+        { P_, P_, P_, P_, P_, P_, P_, P_ },
+    },
+    { /* frame 1 (swirl) */
+        { P_, P_, P_, P_, P_O, P_O, P_, P_ },
+        { P_, P_, P_, P_O, P_Y, P_Y, P_O, P_ },
+        { P_, P_O, P_O, P_Y, P_Y, P_Y, P_, P_ },
+        { P_, P_O, P_Y, P_Y, P_Y, P_O, P_, P_ },
+        { P_, P_O, P_Y, P_Y, P_O, P_, P_, P_ },
+        { P_, P_, P_O, P_Y, P_Y, P_O, P_, P_ },
+        { P_, P_, P_, P_O, P_O, P_, P_, P_ },
+        { P_, P_, P_, P_, P_, P_, P_, P_ },
+    },
+};
+
+/* Green 1-UP mushroom, 12 x 12: same shape, green cap. */
+static const uint8_t mushroom_1up_sprite[12][12] = {
+    { P_, P_, P_G, P_G, P_G, P_G, P_G, P_G, P_G, P_G, P_, P_ },
+    { P_, P_G, P_G, P_W, P_G, P_G, P_G, P_G, P_G, P_G, P_G, P_ },
+    { P_G, P_G, P_G, P_G, P_G, P_G, P_G, P_G, P_G, P_G, P_G, P_G },
+    { P_G, P_G, P_W, P_G, P_G, P_G, P_G, P_W, P_G, P_G, P_G, P_G },
+    { P_G, P_G, P_G, P_G, P_G, P_G, P_G, P_G, P_G, P_G, P_G, P_G },
+    { P_, P_, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_ },
+    { P_, P_, P_S, P_K, P_S, P_S, P_S, P_S, P_K, P_S, P_, P_ },
+    { P_, P_, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_ },
+    { P_, P_, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_S, P_, P_ },
+    { P_, P_, P_, P_S, P_S, P_S, P_S, P_S, P_, P_, P_, P_ },
+    { P_, P_, P_, P_, P_S, P_S, P_S, P_, P_, P_, P_, P_ },
+    { P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_ },
+};

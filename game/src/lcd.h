@@ -43,7 +43,8 @@
 
 /* environment palette: 21..32 sky ramp (deep -> pale),
    33 = far mountains, 34 = near mountains,
-   36..47 night sky ramp, 48/49 night hills, 50..255 = gray ramp */
+   36..47 night sky ramp, 48/49 night hills,
+   50..61 sunset ramp (deep purple -> orange), 62..255 = gray ramp */
 #define C_SKY_TOP     21
 #define C_SKY_HORIZON 32
 #define C_MOUNT_FAR   33
@@ -52,6 +53,8 @@
 #define C_NIGHT_HORIZ 47
 #define C_NIGHT_HILL_FAR  48
 #define C_NIGHT_HILL_NEAR 49
+#define C_SUNSET_TOP      50
+#define C_SUNSET_HORIZ    61
 
 void lcd_init(void);
 void lcd_clear(uint8_t color);

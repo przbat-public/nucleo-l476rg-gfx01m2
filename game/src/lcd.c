@@ -110,9 +110,17 @@ static void palette_init(void)
     pal_rgb[C_NIGHT_HILL_FAR]  = rgb565(40, 70, 40);
     pal_rgb[C_NIGHT_HILL_NEAR] = rgb565(24, 48, 24);
 
-    /* 50..255: grayscale ramp */
-    for (int i = 50; i < 256; i++) {
-        uint8_t v = (uint8_t)((i - 50) * 255u / 205u);
+    /* sunset ramp: deep purple at the top, orange at the horizon */
+    for (int i = 0; i < 12; i++) {
+        uint8_t r = (uint8_t)(48 + i * 17);    /* 48 .. 235  */
+        uint8_t g = (uint8_t)(14 + i * 9);     /* 14 .. 113  */
+        uint8_t b = (uint8_t)(70 - i * 5);     /* 70 .. 15   */
+        pal_rgb[C_SUNSET_TOP + i] = rgb565(r, g, b);
+    }
+
+    /* 62..255: grayscale ramp */
+    for (int i = 62; i < 256; i++) {
+        uint8_t v = (uint8_t)((i - 62) * 255u / 193u);
         pal_rgb[i] = rgb565(v, v, v);
     }
 }

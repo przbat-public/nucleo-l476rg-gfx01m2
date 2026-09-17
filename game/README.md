@@ -19,6 +19,14 @@ below so that gameplay code stays readable and easy to change.
   timer with a time bonus, the flag-pole slide + castle ending, stompable
   mushrooms with a collect bounce, drifting clouds, decorative trees and
   rocks along the levels
+- Fireballs (joystick DOWN + B1) that bounce along the ground and burn
+  enemies; winged flying enemies; a green 1-UP mushroom; a mid-level
+  checkpoint pole (respawn point); flag grab height bonus
+- Swimmable water ponds, diagonal slopes you can walk up, horizontal
+  lifts, a secret Q pipe per level that warps to the bonus coin room
+- Visual themes per level: day, sunset (world 2) and night (world 5)
+- Saved progress in flash: CONTINUE on the title screen resumes from
+  the farthest level reached
 - Score, coins, timer and level HUD, plus a high score stored in flash
   (survives power-off)
 
@@ -28,8 +36,11 @@ below so that gameplay code stays readable and easy to change.
 |---|---|
 | Move left / right | joystick LEFT (PB6) / RIGHT (PB0) |
 | Jump (hold = higher jump) | the blue USER button **B1** (PC13) |
-| Pause / resume | joystick DOWN (PB4) |
+| Fire a fireball | joystick DOWN + B1 together |
+| Pause / resume | joystick DOWN (PB4) alone |
+| Enter a secret Q pipe | stand on it, press DOWN |
 | Start / retry / menu | B1 |
+| Continue from saved level | DOWN on the title screen |
 
 Note: PA0 is permanently pulled LOW on this shield and must never be
 mapped; the joystick UP contact (PC0) is unused by the game.
@@ -80,9 +91,10 @@ Levels are ASCII maps in `game.c` (20 rows × 64 columns, 16 px tiles):
 ```
 '.' air   '#' ground   'B' brick   'C' coin
 'E' enemy spawn   'F' goal flag   'P' player start
-'?' coin block   'G' mushroom block   'S' star block
-'T' pipe   'M' moving platform anchor
-'Y' tree (decoration)   'R' rock (decoration)
+'?' coin block   'G' mushroom block   'S' star block   'H' 1-UP block
+'T' pipe   'Q' secret pipe (warp)   'M' vertical platform   'L' lift
+'Y' tree   'R' rock (decorations)   'K' checkpoint   'W' flying enemy
+'/' and '\' slopes   '~' water
 ```
 
 Add your map to the `levels[]` array and bump `LEVEL_COUNT`.

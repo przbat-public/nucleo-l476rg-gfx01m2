@@ -45,7 +45,15 @@ enum { T_AIR = '.', T_GROUND = '#', T_BRICK = 'B',
        T_COIN = 'C', T_ENEMY = 'E', T_FLAG = 'F', T_PLAYER = 'P',
        T_QB = '?', T_QB_USED = 'U', T_PIPE = 'T',
        T_MUSH = 'G', T_STAR = 'S',
-       T_TREE = 'Y', T_ROCK = 'R' };
+       T_TREE = 'Y', T_ROCK = 'R',
+       T_FLYER = 'W',      /* winged enemy that flies a sine path   */
+       T_CHECK = 'K',      /* mid-level checkpoint pole             */
+       T_ONEUP = 'H',      /* block hiding the green 1-UP mushroom  */
+       T_SECRET = 'Q',     /* pipe that warps to the bonus room     */
+       T_SLOPE_R = '/',    /* slope ascending to the right          */
+       T_SLOPE_L = '\\', /* slope ascending to the left           */
+       T_WATER = '~',      /* swimmable water                      */
+       T_LIFT = 'L' };     /* horizontally moving platform         */
 
 static const char level1[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "................................................................",
@@ -56,17 +64,17 @@ static const char level1[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "................................................................",
     "..........................................................F.....",
     "................................................................",
-    "................................................................",
+    "..............................W.................................",
     "................................................................",
     "................................................................",
     "................................................................",
     "....................CCCC................CCC.....................",
-    ".....................E.............G...................S........",
+    "..................E................G.........H.........S........",
     "..........CCC.......BBBB......CCC.......BBB.......CCC...........",
     "................................................................",
     ".....Y....BBB.................BBB........Y........BBB...........",
-    "..P....TT......R.....C.C.C..........................R...........",
-    "#######TT#######################################################",
+    "..P....TT......R.....C.C.C....K..QQ.....////\\\\....R...........",
+    "#######TT########################QQ#############################",
     "################################################################",
 };
 
@@ -81,15 +89,15 @@ static const char level2[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "................................................................",
     "................................................................",
     "................................................................",
-    "................................................................",
+    "....................W...........................................",
     "................................................................",
     "........................CCC......CCC............................",
-    "...........................G......E..S..........................",
+    "...........................G......E..S.........H................",
     "........................BBB......BBB............................",
     "................................................................",
     ".................BB...C.......C.................C...............",
-    "..P..Y....TT................R........Y.......E..TT..............",
-    "##########TT###....######################....########TT#########",
+    "..P..Y....TT................R.////\\\\.......E..TT..............",
+    "##########TT###....###########QQ#########....########TT#########",
     "###############....######################....###################",
 };
 
@@ -103,17 +111,17 @@ static const char level3[LEVEL_ROWS][LEVEL_COLS + 1] = {
     ".............................................................F..",
     "................................................................",
     "................................................................",
-    "...........BB...................................................",
+    "...........BB...........................W.......................",
     "..........CCB...................................................",
     "................................................................",
     ".........BB.....................................................",
     "................G.........CCC.....BBB.....CSC.....BBB...........",
     "..................................CCC......E......CCC...........",
     "......BB..................BBB.............BBB...................",
-    ".....Y..................................C..............C........",
-    ".P.ETT..........E..........TT....Y...................R..........",
-    "####TT#####...#######...###TT###################################",
-    "###########...#######...########################################",
+    ".....Y.....~~~..........................C..............C........",
+    ".P.ETT.....~~~..EQQ........TT....Y...........K.......R..........",
+    "####TT###########QQ##...###TT###################################",
+    "#####################...########################################",
 };
 
 static const char level4[LEVEL_ROWS][LEVEL_COLS + 1] = {
@@ -125,17 +133,17 @@ static const char level4[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "................................................................",
     "..............................................................F.",
     "................................................................",
-    ".............CCC............................CCC.................",
+    ".............CCC...................W........CCC.................",
     "........................CCC.....................................",
     "........BBB.....................................................",
     "........CCC.............BBB.............CCC.....................",
     "....................CCC.....CCC......E..................E.......",
     "........BBB......G....E...............S.BBB.............BBB.....",
     "........BBB.........BBB.....BBB.........BBB.............BBB.....",
+    "..............................L.................................",
     "................................................................",
-    "................................................................",
-    ".PE...TT..........Y..............CC....CCC....R...........TT....",
-    "######TT####....###############....##############....#####TT####",
+    ".PE...TT..........Y.QQ...////\\\\CC....CCC....R...........TT....",
+    "######TT####....####QQ#########....##############....#####TT####",
     "############....###############....##############....###########",
 };
 
@@ -149,23 +157,48 @@ static const char level5[LEVEL_ROWS][LEVEL_COLS + 1] = {
     ".............................................................F..",
     "................................................................",
     "................................................................",
-    "............CCC...........................CCC...................",
-    "...........................................ES...................",
+    "............CCC...............W...........CCC...................",
+    "....................H......................ES...................",
     "............BBB...CCC...............CCC...BBB...................",
     "......CCC.........G.....CCC.....................................",
     ".........BBB..........................BBB.......................",
-    "......BBB...............BMB....M...............M........BBB.....",
+    "......BBB...............BMBL...M...............M........BBB.....",
     "................................................................",
     "......................C.........................................",
-    ".PEY........................CCR.......C......R....C.......C.....",
+    ".PEY.....................K..CCR....QQ.C......R....C.......C.....",
+    "############....##############....#QQ#########....##############",
     "############....##############....############....##############",
-    "############....##############....############....##############",
+};
+
+/* the bonus coin room: entered through the secret Q pipes */
+static const char level_bonus[LEVEL_ROWS][LEVEL_COLS + 1] = {
+    "################################################################",
+    "################################################################",
+    "#..............................................................#",
+    "#...C...C...C...C...C...C...C...C...C...C...C...C...C...C......#",
+    "#..............................................................#",
+    "#.....C....C....C....C....C...WC....C....C....C....C....C......#",
+    "#..............................................................#",
+    "#..C...C...C...C...C...C...C...C...C...C...C...C...C...C...C...#",
+    "#..............................................................#",
+    "#.......C.....C.....C.....C.....C.....C.....C.....C............#",
+    "#..............................................................#",
+    "#..............................................................#",
+    "#.........BBBB................?.........BBBB...................#",
+    "#..............................................................#",
+    "#..............................................................#",
+    "#..............................................................#",
+    "#..........................................................QQ..#",
+    "#.P.........E.................E..............E.............QQ..#",
+    "################################################################",
+    "################################################################",
 };
 
 static const char *const levels[] = { &level1[0][0], &level2[0][0],
                                       &level3[0][0], &level4[0][0],
-                                      &level5[0][0] };
-#define LEVEL_COUNT 5
+                                      &level5[0][0],
+                                      &level_bonus[0][0] };
+#define LEVEL_COUNT 5   /* bonus room lives at index 5 */
 
 /* mutable copy of the current level (coins get removed, etc.) */
 static uint8_t grid[LEVEL_ROWS][LEVEL_COLS];
@@ -185,15 +218,18 @@ typedef struct {
     int  vx, vy;       /* vy: only used while flipped by a block bump */
     bool alive;
     bool flipped;      /* launched by a block hit: tumbles off screen */
+    bool flyer;        /* winged: sine flight instead of walking      */
+    int  base_y;       /* flight centre line                          */
+    int  phase;        /* sine phase                                  */
 } enemy_t;
 
-/* mushroom / star power-up dropped out of a G / S block */
+/* mushroom / star / 1-UP power-up dropped out of a G / S / H block */
 typedef struct {
     int  x, y;
     int  vx, vy;
     int  rising;       /* frames left while emerging from the block */
     bool active;
-    bool star;         /* true: bouncing star, false: walking mushroom */
+    int  kind;         /* 0 = mushroom, 1 = star, 2 = green 1-UP     */
 } powerup_t;
 
 static player_t  player;
@@ -201,6 +237,16 @@ static enemy_t   enemies[4];
 static int       enemy_count;
 static powerup_t powup;
 static uint32_t  frame;       /* frame counter (animations) */
+
+/* fireballs: shot with joystick DOWN + B1, bounce along the ground */
+#define MAX_FIRE 2
+typedef struct {
+    int  x, y, vx, vy;
+    bool active;
+    int  life;
+} fireball_t;
+static fireball_t fireballs[MAX_FIRE];
+static int fire_cooldown;
 
 /* classic hit invincibility: a few frames of blinking after damage */
 static int iframes;
@@ -273,7 +319,14 @@ static int shake_x;
 #define MAX_MOVERS 6
 #define MOV_W      48
 #define MOV_H      12
-typedef struct { int x, y; int base_y; int amp; int phase; int dy; } mover_t;
+typedef struct {
+    int x, y;
+    int base_y, base_x;   /* vertical swing around base_y, or       */
+    int amp;              /* horizontal slide around base_x         */
+    int phase;
+    int dy, dx;           /* per-frame movement the rider inherits  */
+    bool horiz;           /* true: horizontal lift, false: vertical  */
+} mover_t;
 static mover_t movers[MAX_MOVERS];
 static int mover_count;
 static int ride = -1;    /* mover the player is standing on */
@@ -298,6 +351,11 @@ static int     coins;
 static int     lives;
 static int     high_score;  /* best score (persisted in flash) */
 static int     cam_x;
+/* screen-space camera: a GLOBAL read fresh at every use. render_world
+ * is a very long function and keeping `cam` in a register made the
+ * compiler reuse that register for sprite tables — enemies, fireballs
+ * and power-ups were drawn at cam = 0 (off screen). */
+static int     cam;
 static int     clear_timer;  /* frames left on the LEVEL CLEAR screen */
 static int     dead_timer;   /* frames left on the death screen */
 static int     intro_timer;  /* frames left on the WORLD intro card */
@@ -305,6 +363,26 @@ static int     flash_timer;  /* white flash when the flag is reached */
 static int     time_left;    /* countdown timer, in seconds */
 static int     time_tick;    /* frame accumulator for the timer */
 static int     bonus;        /* time bonus awarded at the level clear */
+
+/* checkpoint: crossing the K pole moves the respawn point here */
+static int  cp_x, cp_y;
+static bool cp_set;
+
+/* bonus room: a secret pipe (Q) warps here and back */
+static int  return_level;
+static int  return_x, return_y, return_time;
+static bool in_bonus;
+
+/* saved progress: the farthest level reached (flash-persisted) */
+static int  progress;
+
+/* per-level visual theme: 0 = day, 1 = sunset, 2 = night */
+static int theme(void)
+{
+    if (level_idx == 4) return 2;
+    if (level_idx == 1) return 1;
+    return 0;
+}
 
 /* ------------------------------ prototypes ------------------------ */
 
@@ -332,7 +410,8 @@ static void break_brick(int tx, int ty);
 static bool solid_tile(uint8_t t)
 {
     return t == T_GROUND || t == T_BRICK || t == T_PIPE ||
-           t == T_QB || t == T_QB_USED || t == T_MUSH || t == T_STAR;
+           t == T_QB || t == T_QB_USED || t == T_MUSH || t == T_STAR ||
+           t == T_ONEUP || t == T_SECRET;
 }
 
 static bool solid_at(int tx, int ty)
@@ -404,19 +483,20 @@ static void break_brick(int tx, int ty)
     flip_enemies_on(tx, ty);
 }
 
-/* a G / S block is bumped: the power-up rises out of the block top */
-static void spawn_powerup(int tx, int hty, bool is_star)
+/* a G / S / H block is bumped: the power-up rises out of the block top.
+ * kind: 0 = mushroom, 1 = star, 2 = green 1-UP */
+static void spawn_powerup(int tx, int hty, int kind)
 {
     powup.x = tx * TILE + 2;
     powup.y = hty * TILE + 2;       /* hidden inside the block first */
-    powup.vx = is_star ? 2 : 1;
+    powup.vx = (kind == 1) ? 2 : 1;
     powup.vy = 0;
     powup.rising = 14;              /* frames spent emerging */
-    powup.star = is_star;
+    powup.kind = kind;
     powup.active = true;
 }
 
-static void update_powerup(void)
+static void __attribute__((noinline)) update_powerup(void)
 {
     if (!powup.active) return;
 
@@ -427,9 +507,14 @@ static void update_powerup(void)
     if (overlap(player.x, player.y, MARIO_W, mario_h(),
                 powup.x, powup.y, 12, 12)) {
         powup.active = false;
-        score += 100;
-        if (powup.star) {
+        if (powup.kind == 1) {
             star_timer = 100;       /* ~6 s of touch-death invincibility */
+            score += 100;
+        } else if (powup.kind == 2) {
+            if (lives < 9) lives++; /* green 1-UP mushroom */
+            score += 500;
+            spawn_burst(powup.x - cam_x, powup.y, C_GREEN, 12);
+            return;
         } else {
             player.big = true;      /* grow! */
             /* keep the feet planted: raise the top by the extra height */
@@ -438,6 +523,7 @@ static void update_powerup(void)
             if (player.vy > 0 &&
                 (player.y + mario_h() - powup.y) < 8)
                 player.vy = -6;
+            score += 100;
         }
         spawn_burst(powup.x - cam_x, powup.y, C_GOLD, 10);
         return;
@@ -449,7 +535,7 @@ static void update_powerup(void)
         return;
     }
 
-    if (powup.star) {
+    if (powup.kind == 1) {
         /* star: hops along the ground, bouncing off walls */
         powup.vy += 1;
         powup.x += powup.vx;
@@ -483,6 +569,73 @@ static void update_powerup(void)
     if (powup.y > LCD_H + 32) powup.active = false;
 }
 
+/* shoot a fireball from the player's front (max 2 in flight) */
+static void fire_spawn(void)
+{
+    if (fire_cooldown > 0) return;
+    for (int i = 0; i < MAX_FIRE; i++) {
+        if (!fireballs[i].active) {
+            fireballs[i].active = true;
+            fireballs[i].x = player.x + (player.facing_right ? MARIO_W : -8);
+            fireballs[i].y = player.y + 6;          /* chest height */
+            fireballs[i].vx = player.facing_right ? 4 : -4;
+            fireballs[i].vy = -5;
+            fireballs[i].life = 70;
+            fire_cooldown = 12;
+            spawn_burst(player.x + (player.facing_right ? MARIO_W : 0) - cam_x,
+                        player.y + 8, C_ORANGE, 3);
+            return;
+        }
+    }
+}
+
+/* fireballs: gentle gravity, bounce off walls and the ground,
+ * destroy enemies on contact */
+static void __attribute__((noinline)) update_fire(void)
+{
+    if (fire_cooldown > 0) fire_cooldown--;
+    for (int i = 0; i < MAX_FIRE; i++) {
+        fireball_t *f = &fireballs[i];
+        if (!f->active) continue;
+
+        f->vy += 1;                     /* gentle gravity */
+        f->x += f->vx;
+        f->y += f->vy;
+
+        /* bounce off walls */
+        int fx = f->x + (f->vx > 0 ? FIRE_W : 0);
+        if (solid_at(fx / TILE, f->y / TILE) ||
+            solid_at(fx / TILE, (f->y + FIRE_H - 1) / TILE))
+            f->vx = -f->vx;
+
+        /* bounce off the ground */
+        if (f->vy >= 0 && box_hits(f->x, f->y + FIRE_H - 1, FIRE_W, 2)) {
+            f->vy = -7;
+            spawn_burst(f->x - cam_x, f->y + FIRE_H, C_ORANGE, 2);
+        }
+
+        /* destroy enemies on contact */
+        for (int e = 0; e < enemy_count; e++) {
+            enemy_t *en = &enemies[e];
+            if (!en->alive) continue;
+            if (overlap(f->x, f->y, FIRE_W, FIRE_H,
+                        en->x, en->y, ENEMY_W, ENEMY_H)) {
+                en->alive = false;
+                f->active = false;
+                score += 100;
+                spawn_burst(en->x + ENEMY_W / 2 - cam_x,
+                            en->y + ENEMY_H / 2, C_ORANGE, 8);
+                break;
+            }
+        }
+
+        if (--f->life <= 0 ||
+            f->x < cam_x - 32 || f->x > cam_x + LCD_W + 32 ||
+            f->y > LCD_H + 32)
+            f->active = false;
+    }
+}
+
 static void start_level(int n)
 {
     const char *src = levels[n];
@@ -507,11 +660,27 @@ static void start_level(int n)
                     enemies[enemy_count].vy = 0;
                     enemies[enemy_count].alive = true;
                     enemies[enemy_count].flipped = false;
+                    enemies[enemy_count].flyer = false;
                     enemy_count++;
                 }
                 t = T_AIR;
                 break;
-            case 'M':   /* moving platform anchor */
+            case T_FLYER:
+                if (enemy_count < 4) {
+                    enemies[enemy_count].x = tx * TILE + 2;
+                    enemies[enemy_count].y = ty * TILE + 4;
+                    enemies[enemy_count].vx = -1;
+                    enemies[enemy_count].vy = 0;
+                    enemies[enemy_count].alive = true;
+                    enemies[enemy_count].flipped = false;
+                    enemies[enemy_count].flyer = true;
+                    enemies[enemy_count].base_y = ty * TILE + 4;
+                    enemies[enemy_count].phase = tx * 13;
+                    enemy_count++;
+                }
+                t = T_AIR;
+                break;
+            case 'M':   /* moving platform anchor (vertical swing) */
                 if (mover_count < MAX_MOVERS) {
                     movers[mover_count].x = tx * TILE;
                     movers[mover_count].y = ty * TILE;
@@ -519,6 +688,20 @@ static void start_level(int n)
                     movers[mover_count].amp = 26;
                     movers[mover_count].phase = 0;
                     movers[mover_count].dy = 0;
+                    movers[mover_count].horiz = false;
+                    mover_count++;
+                }
+                t = T_AIR;
+                break;
+            case T_LIFT:   /* horizontally sliding platform */
+                if (mover_count < MAX_MOVERS) {
+                    movers[mover_count].x = tx * TILE;
+                    movers[mover_count].y = ty * TILE;
+                    movers[mover_count].base_x = tx * TILE;
+                    movers[mover_count].amp = 60;
+                    movers[mover_count].phase = 0;
+                    movers[mover_count].dx = 0;
+                    movers[mover_count].horiz = true;
                     mover_count++;
                 }
                 t = T_AIR;
@@ -537,6 +720,8 @@ static void start_level(int n)
     iframes = 0;
     star_timer = 0;
     powup.active = false;
+    fire_cooldown = 0;
+    for (int i = 0; i < MAX_FIRE; i++) fireballs[i].active = false;
     time_left = 300;               /* classic 5-minute countdown */
     time_tick = 0;
     bonus = 0;
@@ -549,15 +734,21 @@ static void start_level(int n)
     state = S_INTRO;
 }
 
-/* moving platforms: swing up/down on a sine */
+/* moving platforms: swing up/down or slide left/right on a sine */
 static void update_movers(void)
 {
     for (int i = 0; i < mover_count; i++) {
         mover_t *m = &movers[i];
         int prev = m->y;
+        int px   = m->x;
         m->phase = (m->phase + 1) & 63;
-        m->y = m->base_y + m->amp * MOV_SIN[m->phase] / 31;
-        m->dy = m->y - prev;
+        if (m->horiz) {
+            m->x = m->base_x + m->amp * MOV_SIN[m->phase] / 31;
+            m->dx = m->x - px;
+        } else {
+            m->y = m->base_y + m->amp * MOV_SIN[m->phase] / 31;
+            m->dy = m->y - prev;
+        }
     }
 }
 
@@ -569,23 +760,41 @@ static int  jump_buffer;   /* frames left to auto-jump after landing     */
 static bool skidding;
 static bool prev_center;   /* edge detection for the B1 button           */
 
+/* tile lookup with bounds checks (helpers for the player physics) */
+static uint8_t tile_at(int tx, int ty)
+{
+    if (tx < 0 || tx >= LEVEL_COLS || ty < 0 || ty >= LEVEL_ROWS)
+        return T_AIR;
+    return grid[ty][tx];
+}
+
+static bool water_at(int x, int y)
+{
+    return tile_at(x / TILE, y / TILE) == T_WATER;
+}
+
 static void update_player(void)
 {
     bool left  = input_held(DIR_LEFT) && !auto_right;
     bool right = input_held(DIR_RIGHT) || auto_right;
     bool center = input_held(DIR_CENTER);
 
+    /* in water: sluggish, floaty physics */
+    bool in_water = water_at(player.x + MARIO_W / 2,
+                             player.y + mario_h() - 2);
+    int  max_speed = in_water ? 2 : MAX_SPEED;
+
     /* --- horizontal: accelerate / decelerate / skid --- */
     if (right && !left) {
         if (player.vx < 0 && player.vx <= -SKID_SPEED)
             skidding = true;                 /* turn-around skid */
         player.vx += ACCEL;
-        if (player.vx > MAX_SPEED) player.vx = MAX_SPEED;
+        if (player.vx > max_speed) player.vx = max_speed;
     } else if (left && !right) {
         if (player.vx > 0 && player.vx >= SKID_SPEED)
             skidding = true;
         player.vx -= ACCEL;
-        if (player.vx < -MAX_SPEED) player.vx = -MAX_SPEED;
+        if (player.vx < -max_speed) player.vx = -max_speed;
     } else {
         /* no input: friction */
         if (player.vx > 0) { player.vx -= DECEL; if (player.vx < 0) player.vx = 0; }
@@ -619,7 +828,15 @@ static void update_player(void)
     if (jump_buffer > 0) jump_buffer--;
 
     /* --- gravity: rises gently, falls snappy --- */
-    if (player.vy < 0) {
+    if (in_water) {
+        /* swimming: repeated kicks, slow sinking, no jump-cut */
+        if ((center || jump_buffer > 0)) {
+            player.vy = -4;                 /* swim kick */
+            jump_buffer = 0;
+        }
+        player.vy += 1;
+        if (player.vy > 3) player.vy = 3;
+    } else if (player.vy < 0) {
         player.vy += GRAVITY_RISE;
         /* variable jump height: releasing B1 cuts the rise short */
         if (player.vy < JUMP_CUT && !center)
@@ -633,10 +850,12 @@ static void update_player(void)
     if (ride >= 0) {
         mover_t *m = &movers[ride];
         if (overlap(player.x, player.y + mario_h() - 2, MARIO_W, 2,
-                    m->x, m->y - 4, MOV_W, 10))
+                    m->x, m->y - 4, MOV_W, 10)) {
             player.y += m->dy;
-        else
+            player.x += m->dx;
+        } else {
             ride = -1;
+        }
     }
 
     /* --- vertical move with collision --- */
@@ -646,7 +865,26 @@ static void update_player(void)
         int ny = player.y + player.vy;
         int feet = ny + mario_h();
         bool landed = false;
-        if (box_hits(player.x + 1, feet - 1, MARIO_W - 2, 1)) {
+        /* slopes: the diagonal surface lifts the player as he walks
+         * onto it (slopes are NOT solid, so the horizontal check lets
+         * him in and this check carries him up the ramp) */
+        {
+            int cx = player.x + MARIO_W / 2;
+            int sx2 = tile_at(cx / TILE, feet / TILE);
+            int off = cx % TILE;
+            if (sx2 == T_SLOPE_R || sx2 == T_SLOPE_L) {
+                int surf = (sx2 == T_SLOPE_R)
+                         ? (feet / TILE + 1) * TILE - off - 1
+                         : (feet / TILE) * TILE + off;
+                if (feet >= surf - 1) {
+                    player.y = surf - mario_h();
+                    player.vy = 0;
+                    player.on_ground = true;
+                    landed = true;
+                }
+            }
+        }
+        if (!landed && box_hits(player.x + 1, feet - 1, MARIO_W - 2, 1)) {
             player.y = (feet / TILE) * TILE - mario_h();  /* snap on top */
             if (!was_ground && player.vy >= 5) {
                 /* landing dust */
@@ -705,12 +943,17 @@ static void update_player(void)
                 } else if (grid[hty][tx] == T_MUSH) {
                     /* mushroom block -> mushroom power-up pops out */
                     grid[hty][tx] = T_QB_USED;
-                    spawn_powerup(tx, hty, false);
+                    spawn_powerup(tx, hty, 0);
                     flip_enemies_on(tx, hty);
                 } else if (grid[hty][tx] == T_STAR) {
                     /* star block -> star power-up pops out */
                     grid[hty][tx] = T_QB_USED;
-                    spawn_powerup(tx, hty, true);
+                    spawn_powerup(tx, hty, 1);
+                    flip_enemies_on(tx, hty);
+                } else if (grid[hty][tx] == T_ONEUP) {
+                    /* 1-UP block -> green mushroom pops out */
+                    grid[hty][tx] = T_QB_USED;
+                    spawn_powerup(tx, hty, 2);
                     flip_enemies_on(tx, hty);
                 } else if (grid[hty][tx] == T_BRICK) {
                     /* brick: shards or a hidden coin */
@@ -788,7 +1031,16 @@ static void update_player(void)
     if (!flag_done)
         for (int ty = 0; ty < LEVEL_ROWS; ty++) {
             if (grid[ty][ptx] == T_FLAG) {
-                score += 100;
+                /* classic: the higher the grab, the bigger the bonus */
+                int ground_row = LEVEL_ROWS;
+                for (int gy = ty; gy < LEVEL_ROWS; gy++)
+                    if (solid_tile(grid[gy][ptx])) { ground_row = gy; break; }
+                int grab_h = ground_row * TILE - player.y;
+                int flag_bonus = (grab_h >= 112) ? 1000 :
+                                 (grab_h >= 80)  ? 800  :
+                                 (grab_h >= 48)  ? 400  :
+                                 (grab_h >= 16)  ? 200  : 100;
+                score += flag_bonus;
                 flag_tx = ptx;
                 flag_done = true;
                 player.x = ptx * TILE + 2;     /* grab the pole */
@@ -802,6 +1054,46 @@ static void update_player(void)
                 return;
             }
         }
+
+    /* --- cross the checkpoint pole --- */
+    if (!cp_set) {
+        for (int ty = 0; ty < LEVEL_ROWS; ty++) {
+            if (grid[ty][ptx] == T_CHECK) {
+                cp_set = true;
+                cp_x = player.x;
+                cp_y = player.y;
+                spawn_burst(player.x + MARIO_W / 2 - cam_x, player.y,
+                            C_WHITE, 12);
+                break;
+            }
+        }
+    }
+
+    /* --- secret pipe: stand on a Q pipe and press DOWN to warp --- */
+    if (input_held(DIR_DOWN) && player.on_ground) {
+        int fty = (player.y + mario_h()) / TILE;
+        if (tile_at(ptx, fty) == T_SECRET) {
+            if (in_bonus) {
+                /* the bonus-room pipe: warp back to the overworld */
+                in_bonus = false;
+                start_level(return_level);
+                player.x = return_x;
+                player.y = return_y;
+                time_left = return_time;
+                cp_set = false;
+            } else {
+                /* warp into the bonus room */
+                return_level = level_idx;
+                return_x = player.x;
+                return_y = player.y;
+                return_time = time_left;
+                in_bonus = true;
+                cp_set = false;
+                start_level(LEVEL_COUNT);
+            }
+            return;
+        }
+    }
 
     /* --- fell into a pit --- */
     if (player.y > LCD_H + 16)
@@ -839,19 +1131,37 @@ static void update_enemies(void)
             continue;
         }
 
-        /* wall in front -> turn around */
-        int fx = e->x + (e->vx > 0 ? ENEMY_W : -1);
-        if (solid_at(fx / TILE, e->y / TILE) ||
-            solid_at(fx / TILE, (e->y + ENEMY_H - 1) / TILE)) {
-            e->vx = -e->vx;
-        } else {
-            /* no ground under the front foot -> turn (platform edge) */
-            int foot_x = e->x + (e->vx > 0 ? ENEMY_W : -1);
-            int foot_y = (e->y + ENEMY_H + 2) / TILE;
-            if (!solid_at(foot_x / TILE, foot_y))
+        if (e->flyer) {
+            /* winged: sine flight over gaps, turning at walls */
+            e->phase++;
+            e->y = e->base_y + MOV_SIN[(e->phase + e->x / 3) & 63] * 14 / 31;
+            int fx = e->x + (e->vx > 0 ? ENEMY_W : -1);
+            uint8_t ft = tile_at(fx / TILE, e->y / TILE);
+            if (solid_at(fx / TILE, e->y / TILE) ||
+                solid_at(fx / TILE, (e->y + ENEMY_H - 1) / TILE) ||
+                ft == T_SLOPE_R || ft == T_SLOPE_L)
                 e->vx = -e->vx;
+            e->x += e->vx;
+        } else {
+            /* wall in front -> turn around (slopes and water count) */
+            int fx = e->x + (e->vx > 0 ? ENEMY_W : -1);
+            uint8_t ft = tile_at(fx / TILE, e->y / TILE);
+            uint8_t ft2 = tile_at(fx / TILE, (e->y + ENEMY_H - 1) / TILE);
+            if (solid_at(fx / TILE, e->y / TILE) ||
+                solid_at(fx / TILE, (e->y + ENEMY_H - 1) / TILE) ||
+                ft == T_SLOPE_R || ft == T_SLOPE_L ||
+                ft2 == T_SLOPE_R || ft2 == T_SLOPE_L ||
+                ft == T_WATER || ft2 == T_WATER) {
+                e->vx = -e->vx;
+            } else {
+                /* no ground under the front foot -> turn (platform edge) */
+                int foot_x = e->x + (e->vx > 0 ? ENEMY_W : -1);
+                int foot_y = (e->y + ENEMY_H + 2) / TILE;
+                if (!solid_at(foot_x / TILE, foot_y))
+                    e->vx = -e->vx;
+            }
+            e->x += e->vx;
         }
-        e->x += e->vx;
 
         /* collide with the player */
         if (overlap(player.x, player.y, MARIO_W, mario_h(),
@@ -1110,6 +1420,67 @@ static void draw_tile(int sx, int sy, int tx, uint8_t t)
         lcd_px(sx + 10, sy + 12, C_DARK_GRAY);
         break;
 
+    case T_CHECK:
+        /* checkpoint pole: white mast with a green pennant */
+        lcd_rect(sx + 7, sy, sx + 8, sy + TILE - 1, C_WHITE);
+        lcd_rect(sx + 9, sy + 1, sx + 14, sy + 3, C_GREEN);
+        lcd_rect(sx + 9, sy + 4, sx + 12, sy + 4, C_DARK_GREEN);
+        break;
+
+    case T_WATER: {
+        /* animated water: light blue with a moving dark wave band */
+        int wf = (int)((frame >> 4) & 1);
+        lcd_rect(sx, sy, sx + TILE - 1, sy + TILE - 1, C_CYAN);
+        lcd_rect(sx, sy + 5 + wf, sx + TILE - 1, sy + 7 + wf, C_BLUE);
+        lcd_rect(sx, sy, sx + TILE - 1, sy, C_WHITE);
+        break;
+    }
+
+    case T_SLOPE_R:
+        /* diagonal slope ascending to the right, grass line on top */
+        for (int dy = 0; dy < TILE; dy++)
+            lcd_rect(sx + dy, sy + dy, sx + TILE - 1, sy + dy, C_BROWN);
+        for (int dy = 0; dy < TILE; dy++)
+            lcd_px(sx + dy, sy + dy, C_GREEN);
+        lcd_px(sx, sy + TILE - 1, C_DARK_GRAY);
+        break;
+
+    case T_SLOPE_L:
+        /* diagonal slope ascending to the left */
+        for (int dy = 0; dy < TILE; dy++)
+            lcd_rect(sx, sy + dy, sx + TILE - 1 - dy, sy + dy, C_BROWN);
+        for (int dy = 0; dy < TILE; dy++)
+            lcd_px(sx + TILE - 1 - dy, sy + dy, C_GREEN);
+        lcd_px(sx + TILE - 1, sy + TILE - 1, C_DARK_GRAY);
+        break;
+
+    case T_ONEUP:
+        /* orange-brown block hiding a green 1-UP mushroom */
+        lcd_rect(sx, sy, sx + TILE - 1, sy + TILE - 1, C_BROWN);
+        lcd_rect(sx, sy, sx + TILE - 1, sy, C_BRICK_HI);
+        lcd_rect(sx, sy + TILE - 1, sx + TILE - 1, sy + TILE - 1, C_DARK_GRAY);
+        lcd_px(sx + 1, sy + 1, C_DARK_GRAY);  lcd_px(sx + 14, sy + 1, C_DARK_GRAY);
+        lcd_px(sx + 1, sy + 14, C_DARK_GRAY); lcd_px(sx + 14, sy + 14, C_DARK_GRAY);
+        lcd_sprite(mushroom_1up_sprite[0], 12, 12, sx + 2, sy + 2,
+                   SPR_TRANSPARENT);
+        break;
+
+    case T_SECRET: {
+        /* secret warp pipe: same shape as a pipe, darker rim */
+        bool lip = (ty == 0) || (grid[ty - 1][tx] != T_SECRET);
+        if (lip) {
+            lcd_rect(sx - 2, sy + 2, sx + TILE + 1, sy + 6, C_PIPE);
+            lcd_rect(sx - 2, sy + 6, sx + TILE + 1, sy + 6, C_PIPE_DK);
+            lcd_rect(sx + 3, sy + 7, sx + 5, sy + TILE - 1, C_PIPE_DK);
+            lcd_rect(sx + 10, sy + 7, sx + 11, sy + TILE - 1, C_DARK_GRAY);
+        } else {
+            lcd_rect(sx + 3, sy, sx + TILE - 4, sy + TILE - 1, C_PIPE);
+            lcd_rect(sx + 3, sy, sx + 5, sy + TILE - 1, C_PIPE_DK);
+            lcd_rect(sx + 10, sy, sx + 11, sy + TILE - 1, C_DARK_GRAY);
+        }
+        break;
+    }
+
     default:
         break;
     }
@@ -1175,14 +1546,17 @@ static void draw_cloud(int x, int y, uint8_t c, uint8_t shade, int s)
 
 static void render_world(void)
 {
-    int cam = cam_x + shake_x;   /* shake_x: +-2 px during the death screen */
+    cam = cam_x + shake_x;        /* shake_x: +-2 px during the death screen */
     bool night = (level_idx == 4);   /* level 5 is the night level */
 
     /* full background repaint EVERY frame: the world scrolls, and a
      * static background would leave trails behind the moving tiles */
     {
-        int top = night ? C_NIGHT_TOP : C_SKY_TOP;
-        int hor = night ? C_NIGHT_HORIZ : C_SKY_HORIZON;
+        int th = theme();   /* 0 day, 1 sunset, 2 night */
+        int top = th == 2 ? C_NIGHT_TOP :
+                  th == 1 ? C_SUNSET_TOP : C_SKY_TOP;
+        int hor = th == 2 ? C_NIGHT_HORIZ :
+                  th == 1 ? C_SUNSET_HORIZ : C_SKY_HORIZON;
         for (int y = 0; y < 200; y++)
             lcd_rect(0, y, LCD_W - 1, y,
                      (uint8_t)(top + (199 - y) * (hor - top) / 199));
@@ -1251,6 +1625,14 @@ static void render_world(void)
     for (int i = 0; i < enemy_count; i++) {
         enemy_t *e = &enemies[i];
         if (!e->alive) continue;
+        if (e->flyer) {
+            /* flapping wings on both sides */
+            int wf = (int)((frame >> 3) & 1);
+            lcd_rect(e->x - cam - 3, e->y + 1 + wf, e->x - cam - 1,
+                     e->y + 3 + wf, C_WHITE);
+            lcd_rect(e->x - cam + ENEMY_W + 1, e->y + 1 + wf,
+                     e->x - cam + ENEMY_W + 3, e->y + 3 + wf, C_WHITE);
+        }
         if (e->flipped)
             lcd_sprite_flip_v(enemy_sprite[0][0], ENEMY_W, ENEMY_H,
                               e->x - cam, e->y, SPR_TRANSPARENT);
@@ -1259,11 +1641,25 @@ static void render_world(void)
                        e->x - cam, e->y, SPR_TRANSPARENT);
     }
 
+    /* fireballs */
+    {
+        int ff = (int)((frame >> 2) & 1);
+        for (int i = 0; i < MAX_FIRE; i++) {
+            fireball_t *f = &fireballs[i];
+            if (!f->active) continue;
+            lcd_sprite(fire_sprite[ff][0], FIRE_W, FIRE_H,
+                       f->x - cam, f->y, SPR_TRANSPARENT);
+        }
+    }
+
     /* power-up on the loose (mushroom walks, star bounces) */
     if (powup.active) {
-        if (powup.star)
+        if (powup.kind == 1)
             lcd_sprite(star_sprite[0], 12, 12, powup.x - cam, powup.y,
                        SPR_TRANSPARENT);
+        else if (powup.kind == 2)
+            lcd_sprite(mushroom_1up_sprite[0], 12, 12, powup.x - cam,
+                       powup.y, SPR_TRANSPARENT);
         else
             lcd_sprite(mushroom_sprite[0], 12, 12, powup.x - cam, powup.y,
                        SPR_TRANSPARENT);
@@ -1327,6 +1723,13 @@ static void render_title(void)
 
     lcd_text(24, 220, "LEFT/RIGHT: move", C_WHITE, C_DARK_GREEN, 1);
     lcd_text(24, 238, "B1 (blue): jump", C_WHITE, C_DARK_GREEN, 1);
+    if (progress > 0) {
+        char buf[8];
+        lcd_text(24, 248, "DOWN: CONTINUE", C_GREEN, C_DARK_GREEN, 1);
+        fmt_int(buf, progress + 1);
+        lcd_text(126, 248, "LV", C_GREEN, C_DARK_GREEN, 1);
+        lcd_text(142, 248, buf, C_YELLOW, C_DARK_GREEN, 1);
+    }
     lcd_text(48, 268, "PRESS B1", C_YELLOW, C_DARK_GREEN, 2);
 }
 
@@ -1418,15 +1821,21 @@ static void highscore_save(void)
     flash_wait();
     *(volatile uint32_t *)(HS_PAGE_BASE + 4) = (uint32_t)high_score;
     flash_wait();
+    *(volatile uint32_t *)(HS_PAGE_BASE + 8) = (uint32_t)progress;
+    flash_wait();
     *cr |= (1u << 31);                      /* LOCK */
 }
 
 static void highscore_load(void)
 {
-    if (*(volatile uint32_t *)HS_PAGE_BASE == HS_MAGIC)
+    if (*(volatile uint32_t *)HS_PAGE_BASE == HS_MAGIC) {
         high_score = (int)*(volatile uint32_t *)(HS_PAGE_BASE + 4);
-    else
+        progress   = (int)*(volatile uint32_t *)(HS_PAGE_BASE + 8);
+    } else {
         high_score = 0;
+        progress   = 0;
+    }
+    if (progress < 0 || progress > LEVEL_COUNT - 1) progress = 0;
 }
 
 void game_run(void)
@@ -1462,7 +1871,18 @@ void game_run(void)
         case S_TITLE:
             render_title();
             lcd_flush();
-            if (press == DIR_CENTER) start_level(0);
+            if (press == DIR_CENTER) {
+                cp_set = false;
+                start_level(0);
+            } else if (press == DIR_DOWN && progress > 0) {
+                /* CONTINUE: resume from the farthest level reached */
+                score = 0;
+                coins = 0;
+                lives = 3;
+                level_idx = progress;
+                cp_set = false;
+                start_level(progress);
+            }
             break;
 
         case S_INTRO:
@@ -1472,9 +1892,14 @@ void game_run(void)
             lcd_rect(36, 130, 204, 172, C_BLACK);
             {
                 char buf[8];
-                lcd_text(90, 138, "WORLD", C_WHITE, C_BLACK, 1);
-                fmt_int(buf, level_idx + 1);
-                lcd_text(110, 152, buf, C_YELLOW, C_BLACK, 2);
+                if (in_bonus) {
+                    lcd_text(78, 138, "BONUS", C_WHITE, C_BLACK, 1);
+                    lcd_text(96, 152, "ROOM", C_YELLOW, C_BLACK, 2);
+                } else {
+                    lcd_text(90, 138, "WORLD", C_WHITE, C_BLACK, 1);
+                    fmt_int(buf, level_idx + 1);
+                    lcd_text(110, 152, buf, C_YELLOW, C_BLACK, 2);
+                }
             }
             lcd_flush();
             if (--intro_timer <= 0) {
@@ -1483,8 +1908,10 @@ void game_run(void)
             break;
 
         case S_PLAYING:
-            if (press == DIR_DOWN) {
-                state = S_PAUSED;      /* DOWN toggles pause */
+            if (input_held(DIR_DOWN) && input_held(DIR_CENTER)) {
+                fire_spawn();           /* DOWN + B1 shoots a fireball */
+            } else if (press == DIR_DOWN) {
+                state = S_PAUSED;       /* DOWN alone toggles pause */
                 break;
             }
             /* power-up timers tick down */
@@ -1504,6 +1931,7 @@ void game_run(void)
             update_powerup();   /* after the player: landing on a
                                    walking mushroom always collects it */
             update_enemies();
+            update_fire();
             update_camera();
             render_world();
             draw_hud();
@@ -1530,13 +1958,18 @@ void game_run(void)
                 lives--;
                 if (lives <= 0) {
                     lives = 0;
-                    if (score > high_score) {
+                    if (score > high_score)
                         high_score = score;
-                        highscore_save();
-                    }
+                    if (level_idx > progress)
+                        progress = level_idx;
+                    highscore_save();
                     state = S_GAME_OVER;
                 } else {
                     start_level(level_idx);
+                    if (cp_set) {          /* respawn at the checkpoint */
+                        player.x = cp_x;
+                        player.y = cp_y;
+                    }
                 }
             }
             break;
@@ -1589,13 +2022,19 @@ void game_run(void)
             lcd_flush();
             if (--clear_timer <= 0) {
                 level_idx++;
+                cp_set = false;
                 if (level_idx >= LEVEL_COUNT) {
+                    progress = 0;              /* game complete */
                     if (score > high_score) {
                         high_score = score;
-                        highscore_save();
                     }
+                    highscore_save();
                     state = S_WIN;
                 } else {
+                    if (level_idx > progress) {
+                        progress = level_idx;  /* save progress */
+                        highscore_save();
+                    }
                     start_level(level_idx);
                 }
             }
@@ -1609,6 +2048,7 @@ void game_run(void)
                 coins = 0;
                 lives = 3;
                 level_idx = 0;
+                cp_set = false;
                 start_level(0);
             }
             break;
@@ -1621,6 +2061,7 @@ void game_run(void)
                 coins = 0;
                 lives = 3;
                 level_idx = 0;
+                cp_set = false;
                 state = S_TITLE;
             }
             break;
