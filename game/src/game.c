@@ -124,15 +124,18 @@ static int      enemy_count;
 
 /* ------------------------------ game state ------------------------ */
 
-typedef enum { S_TITLE, S_PLAYING, S_LEVEL_CLEAR, S_GAME_OVER, S_WIN } state_t;
+typedef enum { S_TITLE, S_PLAYING, S_LEVEL_CLEAR, S_GAME_OVER, S_WIN,
+               S_PAUSED, S_DEAD } state_t;
 
 static state_t state;
 static int     level_idx;
 static int     score;
 static int     coins;
 static int     lives;
+static int     high_score;  /* best score of this power-on session */
 static int     cam_x;
 static int     clear_timer;  /* frames left on the LEVEL CLEAR screen */
+static int     dead_timer;   /* frames left on the death screen */
 static uint32_t frame;       /* frame counter (animations) */
 
 /* ------------------------------ prototypes ------------------------ */
@@ -351,13 +354,8 @@ static void update_enemies(void)
 
 static void player_die(void)
 {
-    lives--;
-    if (lives <= 0) {
-        lives = 0;
-        state = S_GAME_OVER;
-    } else {
-        start_level(level_idx);
-    }
+    dead_timer = 25;               /* short death screen (~1.2 s) */
+    state = S_DEAD;
 }
 
 /* ------------------------------ camera ---------------------------- */
@@ -503,9 +501,30 @@ static void render_title(void)
 
     lcd_sprite(mario_sprite[0], MARIO_W, MARIO_H, 114, 140, SPR_TRANSPARENT);
 
+    if (high_score > 0) {
+        char buf[16];
+        lcd_text(60, 172, "BEST", C_WHITE, C_SKY, 1);
+        fmt_int(buf, high_score);
+        lcd_text(90, 172, buf, C_YELLOW, C_SKY, 1);
+    }
+
     lcd_text(24, 220, "LEFT/RIGHT: move", C_WHITE, C_DARK_GREEN, 1);
     lcd_text(24, 238, "CENTER: jump", C_WHITE, C_DARK_GREEN, 1);
     lcd_text(24, 262, "PRESS CENTER TO START", C_YELLOW, C_DARK_GREEN, 2);
+}
+
+static void render_pause(void)
+{
+    /* overlay over the frozen frame */
+    lcd_rect(0, 110, LCD_W - 1, 165, C_BLACK);
+    lcd_text(72, 124, "PAUSED", C_WHITE, C_BLACK, 2);
+    lcd_text(48, 148, "DOWN: resume", C_GREEN, C_BLACK, 1);
+}
+
+static void render_dead(void)
+{
+    lcd_clear(C_BLACK);
+    lcd_text(84, 130, "OUCH!", C_RED, C_BLACK, 3);
 }
 
 static void render_level_clear(void)
@@ -566,6 +585,10 @@ void game_run(void)
             break;
 
         case S_PLAYING:
+            if (press == DIR_DOWN) {
+                state = S_PAUSED;      /* DOWN toggles pause */
+                break;
+            }
             update_player();
             update_enemies();
             update_camera();
@@ -574,13 +597,39 @@ void game_run(void)
             lcd_flush();
             break;
 
+        case S_PAUSED:
+            render_pause();
+            lcd_flush();
+            if (press == DIR_DOWN || press == DIR_CENTER)
+                state = S_PLAYING;
+            break;
+
+        case S_DEAD:
+            render_dead();
+            lcd_flush();
+            if (--dead_timer <= 0) {
+                lives--;
+                if (lives <= 0) {
+                    lives = 0;
+                    if (score > high_score) high_score = score;
+                    state = S_GAME_OVER;
+                } else {
+                    start_level(level_idx);
+                }
+            }
+            break;
+
         case S_LEVEL_CLEAR:
             render_level_clear();
             lcd_flush();
             if (--clear_timer <= 0) {
                 level_idx++;
-                if (level_idx >= LEVEL_COUNT) state = S_WIN;
-                else start_level(level_idx);
+                if (level_idx >= LEVEL_COUNT) {
+                    if (score > high_score) high_score = score;
+                    state = S_WIN;
+                } else {
+                    start_level(level_idx);
+                }
             }
             break;
 
