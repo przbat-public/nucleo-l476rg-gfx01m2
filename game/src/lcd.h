@@ -33,6 +33,13 @@
 #define C_ORANGE      14
 #define C_DARK_GREEN  15
 
+/* environment palette: 16..27 sky ramp (deep -> pale),
+   28 = far mountains, 29 = near mountains, 30..255 = gray ramp */
+#define C_SKY_TOP     16
+#define C_SKY_HORIZON 27
+#define C_MOUNT_FAR   28
+#define C_MOUNT_NEAR  29
+
 void lcd_init(void);
 void lcd_clear(uint8_t color);
 void lcd_px(int16_t x, int16_t y, uint8_t color);

@@ -84,9 +84,19 @@ static void palette_init(void)
     pal_rgb[C_ORANGE]     = rgb565(255, 120, 40);
     pal_rgb[C_DARK_GREEN] = rgb565(20, 120, 40);
 
-    /* 16..255: grayscale ramp (useful for effects and debugging) */
-    for (int i = 16; i < 256; i++) {
-        uint8_t v = (uint8_t)((i - 16) * 255u / 239u);
+    /* 12-step sky ramp: deep blue at the top, pale at the horizon */
+    for (int i = 0; i < 12; i++) {
+        uint8_t r = (uint8_t)(70  + i * 15);   /* 70 .. 235  */
+        uint8_t g = (uint8_t)(130 + i * 8);    /* 130 .. 218 */
+        uint8_t b = (uint8_t)(255 - i * 2);    /* 255 .. 233 */
+        pal_rgb[C_SKY_TOP + i] = rgb565(r, g, b);
+    }
+    pal_rgb[C_MOUNT_FAR]  = rgb565(140, 170, 210);
+    pal_rgb[C_MOUNT_NEAR] = rgb565(95, 135, 175);
+
+    /* 30..255: grayscale ramp */
+    for (int i = 30; i < 256; i++) {
+        uint8_t v = (uint8_t)((i - 30) * 255u / 225u);
         pal_rgb[i] = rgb565(v, v, v);
     }
 }

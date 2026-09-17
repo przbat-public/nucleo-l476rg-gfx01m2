@@ -97,8 +97,32 @@ static const char level3[LEVEL_ROWS][LEVEL_COLS + 1] = {
     "###########...#######...########################################",
 };
 
-static const char *const levels[] = { &level1[0][0], &level2[0][0], &level3[0][0] };
-#define LEVEL_COUNT 3
+static const char level4[LEVEL_ROWS][LEVEL_COLS + 1] = {
+    "................................................................",
+    "................................................................",
+    "................................................................",
+    "................................................................",
+    "................................................................",
+    "................................................................",
+    "..............................................................F.",
+    "................................................................",
+    ".............CCC............................CCC.................",
+    "........................CCC.....................................",
+    ".............BBB............................BBB.................",
+    "........CCC.............BBB.............CCC.....................",
+    "....................CCC.....CCC..........E..............E.......",
+    "........BBB...........E.................BBB.............BBB.....",
+    "....................BBB.....BBB.................................",
+    "................................................................",
+    "................................................................",
+    ".PE..............................CC....CCC.................C....",
+    "############....###############....##############....###########",
+    "############....###############....##############....###########",
+};
+
+static const char *const levels[] = { &level1[0][0], &level2[0][0],
+                                      &level3[0][0], &level4[0][0] };
+#define LEVEL_COUNT 4
 
 /* mutable copy of the current level (coins get removed, etc.) */
 static uint8_t grid[LEVEL_ROWS][LEVEL_COLS];
@@ -121,6 +145,58 @@ typedef struct {
 static player_t player;
 static enemy_t  enemies[4];
 static int      enemy_count;
+static uint32_t frame;       /* frame counter (animations) */
+
+/* ------------------------------ particles ------------------------- */
+
+#define MAX_PARTS 32
+typedef struct {
+    int16_t x, y;        /* screen space */
+    int8_t  vx, vy;
+    uint8_t life;
+    uint8_t color;
+} particle_t;
+
+static particle_t parts[MAX_PARTS];
+
+/* Spawn n short-lived pixels flying out of (x, y). */
+static void spawn_burst(int x, int y, uint8_t color, int n)
+{
+    int spawned = 0;
+    for (int i = 0; i < MAX_PARTS && spawned < n; i++) {
+        if (parts[i].life != 0) continue;
+        parts[i].x = (int16_t)x;
+        parts[i].y = (int16_t)y;
+        parts[i].vx = (int8_t)((frame * 7 + i * 13) % 7 - 3);   /* -3..3 */
+        parts[i].vy = (int8_t)(-5 - ((frame + i) % 3));
+        parts[i].life = 12 + (uint8_t)((frame + i * 5) % 6);
+        parts[i].color = color;
+        spawned++;
+    }
+}
+
+static void update_particles(void)
+{
+    for (int i = 0; i < MAX_PARTS; i++) {
+        if (parts[i].life == 0) continue;
+        parts[i].x += parts[i].vx;
+        parts[i].y += parts[i].vy;
+        parts[i].vy += 1;                      /* gravity */
+        parts[i].life--;
+    }
+}
+
+static void render_particles(void)
+{
+    for (int i = 0; i < MAX_PARTS; i++) {
+        if (parts[i].life == 0) continue;
+        lcd_px(parts[i].x, parts[i].y, parts[i].color);
+    }
+}
+
+/* screen shake: shake_timer frames of a +-2 px jitter */
+static int shake_timer;
+static int shake_x;
 
 /* ------------------------------ game state ------------------------ */
 
@@ -136,7 +212,6 @@ static int     high_score;  /* best score of this power-on session */
 static int     cam_x;
 static int     clear_timer;  /* frames left on the LEVEL CLEAR screen */
 static int     dead_timer;   /* frames left on the death screen */
-static uint32_t frame;       /* frame counter (animations) */
 
 /* ------------------------------ prototypes ------------------------ */
 
@@ -250,12 +325,20 @@ static void update_player(void)
         player.vy = JUMP_CUT;
 
     /* --- vertical move with collision --- */
+    bool was_ground = player.on_ground;
     if (player.vy >= 0) {
         /* falling: check the feet line */
         int ny = player.y + player.vy;
         int feet = ny + MARIO_H;
         if (box_hits(player.x + 1, feet - 1, MARIO_W - 2, 1)) {
             player.y = (feet / TILE) * TILE - MARIO_H;   /* snap on top */
+            if (!was_ground && player.vy >= 5) {
+                /* landing dust */
+                spawn_burst(player.x + 2 - cam_x, player.y + MARIO_H - 2,
+                            C_GRAY, 4);
+                spawn_burst(player.x + MARIO_W - 2 - cam_x,
+                            player.y + MARIO_H - 2, C_GRAY, 4);
+            }
             player.vy = 0;
             player.on_ground = true;
         } else {
@@ -296,6 +379,9 @@ static void update_player(void)
                 grid[ty][tx] = T_AIR;
                 score += 10;
                 coins++;
+                /* golden sparkle */
+                spawn_burst(tx * TILE + 8 - cam_x, ty * TILE + 8,
+                            C_GOLD, 6);
             }
         }
 
@@ -344,6 +430,8 @@ static void update_enemies(void)
                 e->alive = false;
                 player.vy = -8;
                 score += 50;
+                spawn_burst(e->x + ENEMY_W / 2 - cam_x,
+                            e->y + ENEMY_H / 2, C_ORANGE, 8);
             } else {
                 player_die();
                 return;
@@ -354,7 +442,8 @@ static void update_enemies(void)
 
 static void player_die(void)
 {
-    dead_timer = 25;               /* short death screen (~1.2 s) */
+    shake_timer = 18;              /* screen shake on the death screen */
+    dead_timer = 25;               /* short death screen (~1.2 s)      */
     state = S_DEAD;
 }
 
@@ -382,17 +471,25 @@ static void fmt_int(char *buf, int v)
 
 static void draw_tile(int sx, int sy, int tx, uint8_t t)
 {
+    int ty = sy / TILE;
+
     switch (t) {
     case T_GROUND:
         lcd_rect(sx, sy, sx + TILE - 1, sy + TILE - 1, C_BROWN);
-        lcd_rect(sx, sy, sx + TILE - 1, sy + 2, C_DARK_GREEN);   /* grass */
+        lcd_rect(sx, sy, sx + TILE - 1, sy + 3, C_DARK_GREEN);   /* grass */
+        lcd_rect(sx, sy, sx + TILE - 1, sy, C_GREEN);            /* highlight */
+        /* deterministic dirt speckles */
+        if (((tx * 7 + ty * 13) & 3) == 0) lcd_px(sx + 3, sy + 9, C_DARK_GRAY);
+        if (((tx * 5 + ty * 11) & 3) == 0) lcd_px(sx + 10, sy + 13, C_DARK_GRAY);
         break;
 
     case T_BRICK:
         lcd_rect(sx, sy, sx + TILE - 1, sy + TILE - 1, C_ORANGE);
+        lcd_rect(sx, sy, sx + TILE - 1, sy, C_GOLD);             /* top light */
+        lcd_rect(sx, sy + TILE - 1, sx + TILE - 1, sy + TILE - 1, C_DARK_GRAY);
         lcd_rect(sx, sy + 5, sx + TILE - 1, sy + 5, C_DARK_GRAY);  /* mortar */
         lcd_rect(sx + 5, sy, sx + 5, sy + 4, C_DARK_GRAY);
-        lcd_rect(sx + 11, sy + 6, sx + 11, sy + TILE - 1, C_DARK_GRAY);
+        lcd_rect(sx + 11, sy + 6, sx + 11, sy + TILE - 2, C_DARK_GRAY);
         break;
 
     case T_COIN: {
@@ -404,12 +501,15 @@ static void draw_tile(int sx, int sy, int tx, uint8_t t)
 
     case T_FLAG:
         /* pole from the flag cell down to the first solid tile */
-        for (int ty = sy / TILE; ty < LEVEL_ROWS; ty++) {
-            lcd_rect(sx + 2, ty * TILE, sx + 3, ty * TILE + TILE - 1, C_WHITE);
-            if (solid_tile(grid[ty][tx])) break;
+        for (int tty = sy / TILE; tty < LEVEL_ROWS; tty++) {
+            lcd_rect(sx + 2, tty * TILE, sx + 3, tty * TILE + TILE - 1, C_WHITE);
+            if (solid_tile(grid[tty][tx])) break;
         }
-        lcd_sprite(flag_sprite[0], FLAG_W, FLAG_H,
-                   sx + 4, sy + 2, SPR_TRANSPARENT);
+        {
+            int wf = (int)((frame >> 3) & 1);   /* waving flag */
+            lcd_sprite(flag_sprite[wf][0], FLAG_W, FLAG_H,
+                       sx + 4, sy + 2, SPR_TRANSPARENT);
+        }
         break;
 
     default:
@@ -417,31 +517,62 @@ static void draw_tile(int sx, int sy, int tx, uint8_t t)
     }
 }
 
-/* Mario faces right in the art; mirror manually when walking left. */
+/* Mario faces right in the art; mirror manually when walking left.
+ * Frame selection: jump pose in the air, walk cycle while moving,
+ * standing otherwise. */
 static void draw_mario(int x, int y, bool facing_right)
 {
+    static const uint8_t walk_seq[4] = { 0, 1, 2, 1 };
+    int f;
+    if (!player.on_ground)
+        f = 3;                           /* jump pose */
+    else if (player.vx != 0)
+        f = walk_seq[(frame >> 2) & 3];  /* walk cycle */
+    else
+        f = 0;                           /* standing */
+
     for (int row = 0; row < MARIO_H; row++) {
         for (int col = 0; col < MARIO_W; col++) {
             int src = facing_right ? col : (MARIO_W - 1 - col);
-            uint8_t c = mario_sprite[row][src];
+            uint8_t c = mario_sprite[f][row][src];
             if (c != SPR_TRANSPARENT)
                 lcd_px(x + col, y + row, c);
         }
     }
 }
 
+/* Triangular-wave mountain silhouette, one column at a time. */
+static void draw_mountains(uint8_t color, int scroll, int amp, int base)
+{
+    for (int x = 0; x < LCD_W; x++) {
+        int t = ((x + scroll) * 3) & 63;
+        int h = (t < 32) ? t : (64 - t);
+        lcd_rect(x, base - h - amp, x, 199, color);
+    }
+}
+
 static void render_world(void)
 {
-    lcd_clear(C_SKY);
+    int cam = cam_x + shake_x;   /* shake_x: +-2 px during the death screen */
 
-    /* decorative parallax clouds */
-    int p1 = (cam_x / 6) % 260 - 20;
-    int p2 = (cam_x / 4) % 260 - 20;
+    /* sky gradient: deep blue at the top, pale at the horizon */
+    for (int y = 0; y < 200; y++)
+        lcd_rect(0, y, LCD_W - 1, y,
+                 (uint8_t)(C_SKY_TOP +
+                           (199 - y) * (C_SKY_HORIZON - C_SKY_TOP) / 199));
+
+    /* two parallax mountain layers + drifting clouds */
+    draw_mountains(C_MOUNT_FAR,  cam / 6, 45, 150);
+    draw_mountains(C_MOUNT_NEAR, cam / 3, 30, 175);
+
+    int p1 = (cam / 6) % 280 - 20;
+    int p2 = (cam / 4) % 280 - 20;
     lcd_rect(p1, 22, p1 + 30, 32, C_WHITE);
     lcd_rect(p2 + 90, 48, p2 + 126, 60, C_WHITE);
+    lcd_rect(p1 + 160, 70, p1 + 186, 78, C_WHITE);
 
-    int cam_tile = cam_x / TILE;
-    int off = cam_x % TILE;
+    int cam_tile = cam / TILE;
+    int off = cam % TILE;
 
     for (int ty = 0; ty < LEVEL_ROWS; ty++) {
         for (int vx = 0; vx <= LCD_W / TILE; vx++) {
@@ -459,11 +590,14 @@ static void render_world(void)
         enemy_t *e = &enemies[i];
         if (!e->alive) continue;
         lcd_sprite(enemy_sprite[ef][0], ENEMY_W, ENEMY_H,
-                   e->x - cam_x, e->y, SPR_TRANSPARENT);
+                   e->x - cam, e->y, SPR_TRANSPARENT);
     }
 
     /* player */
-    draw_mario(player.x - cam_x, player.y, player.facing_right);
+    draw_mario(player.x - cam, player.y, player.facing_right);
+
+    /* particles on top */
+    render_particles();
 }
 
 static void draw_hud(void)
@@ -499,7 +633,7 @@ static void render_title(void)
     lcd_text(60, 60, "MINI", C_RED, C_SKY, 3);
     lcd_text(48, 96, "MARIO", C_RED, C_SKY, 3);
 
-    lcd_sprite(mario_sprite[0], MARIO_W, MARIO_H, 114, 140, SPR_TRANSPARENT);
+    lcd_sprite(mario_sprite[0][0], MARIO_W, MARIO_H, 114, 140, SPR_TRANSPARENT);
 
     if (high_score > 0) {
         char buf[16];
@@ -519,12 +653,6 @@ static void render_pause(void)
     lcd_rect(0, 110, LCD_W - 1, 165, C_BLACK);
     lcd_text(72, 124, "PAUSED", C_WHITE, C_BLACK, 2);
     lcd_text(48, 148, "DOWN/B1: resume", C_GREEN, C_BLACK, 1);
-}
-
-static void render_dead(void)
-{
-    lcd_clear(C_BLACK);
-    lcd_text(84, 130, "OUCH!", C_RED, C_BLACK, 3);
 }
 
 static void render_level_clear(void)
@@ -575,6 +703,16 @@ void game_run(void)
 
     for (;;) {
         frame++;
+
+        /* screen shake decay */
+        if (shake_timer > 0) {
+            shake_x = (int)((frame * 7) & 3) - 2;
+            shake_timer--;
+        } else {
+            shake_x = 0;
+        }
+        update_particles();
+
         dir_t press = input_read();
 
         switch (state) {
@@ -605,7 +743,11 @@ void game_run(void)
             break;
 
         case S_DEAD:
-            render_dead();
+            /* the world stays visible, shaken, with a death plate */
+            render_world();
+            draw_hud();
+            lcd_rect(56, 138, 184, 158, C_BLACK);
+            lcd_text(68, 142, "OUCH!", C_RED, C_BLACK, 2);
             lcd_flush();
             if (--dead_timer <= 0) {
                 lives--;
