@@ -16,7 +16,9 @@ below so that gameplay code stays readable and easy to change.
   ~6 s of invincibility with a rainbow flash (enemies die on touch)
 - Classic extras: blinking invincibility after a hit, coins hidden inside
   every fourth brick, brick debris with gravity, a per-level countdown
-  timer with a time bonus, the flag-pole slide + castle ending
+  timer with a time bonus, the flag-pole slide + castle ending, stompable
+  mushrooms with a collect bounce, drifting clouds, decorative trees and
+  rocks along the levels
 - Score, coins, timer and level HUD, plus a high score stored in flash
   (survives power-off)
 
@@ -80,6 +82,7 @@ Levels are ASCII maps in `game.c` (20 rows × 64 columns, 16 px tiles):
 'E' enemy spawn   'F' goal flag   'P' player start
 '?' coin block   'G' mushroom block   'S' star block
 'T' pipe   'M' moving platform anchor
+'Y' tree (decoration)   'R' rock (decoration)
 ```
 
 Add your map to the `levels[]` array and bump `LEVEL_COUNT`.
