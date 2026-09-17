@@ -1,14 +1,17 @@
 /*
  * input.c — joystick + button input.
  *
- * THE PIN MAP (single source of truth):
+ * THE PIN MAP (single source of truth).
  *
- *   DIR_LEFT   = PB4   (verified with the joystick scanner)
- *   DIR_RIGHT  = PC0   (verified)
- *   DIR_DOWN   = PB0   (verified)
- *   DIR_CENTER = PC7   (verified — the joystick center press)
- *   DIR_UP     = PB13  (not detected on this shield build; the game
- *                       does not use UP, so it maps to a floating pin)
+ * The joystick cap is mounted rotated 90 degrees clockwise on this
+ * shield, so the map below is the scan result rotated accordingly:
+ *
+ *   DIR_LEFT   = PB0
+ *   DIR_RIGHT  = PB13   (if RIGHT does not respond, the UP contact
+ *                        may be PA0 — see the note below)
+ *   DIR_DOWN   = PC0
+ *   DIR_CENTER = PC7
+ *   DIR_UP     = PB4    (unused by the game)
  *
  * NOTE: PA0 reads permanently LOW with the shield mounted (a shield
  * quirk), so it must NOT be used in the map — a stuck pin would make
@@ -26,10 +29,10 @@
 typedef struct { uint8_t port; uint8_t pin; } pin_t;
 
 static const pin_t joy_map[DIR_COUNT] = {
-    [DIR_UP]     = { PORT_B, 13 },   /* floating (unused by the game) */
-    [DIR_DOWN]   = { PORT_B, 0  },
-    [DIR_LEFT]   = { PORT_B, 4  },
-    [DIR_RIGHT]  = { PORT_C, 0  },
+    [DIR_UP]     = { PORT_B, 4  },
+    [DIR_DOWN]   = { PORT_C, 0  },
+    [DIR_LEFT]   = { PORT_B, 0  },
+    [DIR_RIGHT]  = { PORT_B, 13 },
     [DIR_CENTER] = { PORT_C, 7  },
 };
 

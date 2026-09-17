@@ -510,7 +510,7 @@ static void render_title(void)
 
     lcd_text(24, 220, "LEFT/RIGHT: move", C_WHITE, C_DARK_GREEN, 1);
     lcd_text(24, 238, "CENTER: jump", C_WHITE, C_DARK_GREEN, 1);
-    lcd_text(24, 262, "PRESS CENTER TO START", C_YELLOW, C_DARK_GREEN, 2);
+    lcd_text(48, 268, "PRESS CENTER", C_YELLOW, C_DARK_GREEN, 2);
 }
 
 static void render_pause(void)
